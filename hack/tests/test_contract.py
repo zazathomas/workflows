@@ -62,6 +62,20 @@ class VersionTest(unittest.TestCase):
             contract.version_key("4.1.6")
 
 
+class SummarizeTest(unittest.TestCase):
+    def test_reports_a_single_non_baseline_release_without_crashing(self):
+        results = [{"tag": "v4.1.5", "status": "additive"}]
+        lines = contract.summarize(results, "v4.1.6")
+        self.assertEqual(lines[0], "Additive-only contracts: v4.1.5")
+        self.assertNotIn("v4.1.6 matches", " ".join(lines))
+
+    def test_reports_the_baseline_when_it_is_selected(self):
+        results = [{"tag": "v4.1.6", "status": "exact"}, {"tag": "v4.1.5", "status": "exact"}]
+        lines = contract.summarize(results, "v4.1.6")
+        self.assertEqual(lines[0], "v4.1.6 matches the checked-in contract exactly")
+        self.assertIn("Additive-only contracts: none", lines)
+
+
 class RegistryTest(unittest.TestCase):
     def test_registry_lists_the_baseline_and_unique_versions(self):
         registry = contract.load_registry()

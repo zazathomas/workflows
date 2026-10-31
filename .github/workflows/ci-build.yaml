@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build and run production image
         run: |
-          docker build --target server --provenance=mode=max --build-arg VERSION=ci --build-arg GIT_COMMIT="$GITHUB_SHA" -t workflows:verify .
+          docker build --target server --build-arg VERSION=ci --build-arg GIT_COMMIT="$GITHUB_SHA" -t workflows:verify .
           docker run --rm workflows:verify version
       - name: Scan source and build dependencies
         run: |

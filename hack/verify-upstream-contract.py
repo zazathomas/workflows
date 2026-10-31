@@ -206,6 +206,18 @@ def print_details(result, verbose):
         if limit is not None and len(items) > limit:
             print(f"    ... {len(items) - limit} more; rerun with --verbose")
 
+def summarize(results, baseline):
+    """Describe the checked releases without assuming the baseline was selected."""
+    lines = []
+    if any(result["tag"] == baseline for result in results):
+        lines.append(f"{baseline} matches the checked-in contract exactly")
+    others = [result for result in results if result["tag"] != baseline]
+    if others:
+        additive = [result["tag"] for result in others if result["status"] == "additive"]
+        lines.append(f"Additive-only contracts: {', '.join(additive) if additive else 'none'}")
+    lines.append("Schema compatibility is not behavioral compatibility; the cluster conformance matrix is still required.")
+    return lines
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -263,13 +275,8 @@ def main():
         )
         return 1
 
-    baseline_exact = next(result for result in results if result["tag"] == baseline)
-    others = [result for result in results if result["tag"] != baseline]
-    print(f"\n{baseline} matches the checked-in contract exactly")
-    if others:
-        additive = [result["tag"] for result in others if result["status"] == "additive"]
-        print(f"Additive-only contracts: {', '.join(additive) if additive else 'none'}")
-    print("Schema compatibility is not behavioral compatibility; the cluster conformance matrix is still required.")
+    for line in summarize(results, baseline):
+        print(line)
     return 0
 
 

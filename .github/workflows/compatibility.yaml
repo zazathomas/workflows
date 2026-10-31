@@ -74,7 +74,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build the server image once for every release
         run: |
-          docker build --target server --provenance=mode=max \
+          docker build --target server \
             --build-arg VERSION=compatibility \
             --build-arg GIT_COMMIT="$GITHUB_SHA" \
             --build-arg GIT_TAG=compatibility \

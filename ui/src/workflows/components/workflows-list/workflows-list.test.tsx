@@ -1,4 +1,4 @@
-import {render, waitFor} from '@testing-library/react';
+import {fireEvent, render, waitFor} from '@testing-library/react';
 import {createMemoryHistory} from 'history';
 import React from 'react';
 
@@ -27,25 +27,20 @@ describe('WorkflowsList', () => {
         const history = createMemoryHistory();
         history.push('/workflows?namespace=argo');
 
-        const {getByRole, container} = render(<App history={history} />);
+        const {getByRole} = render(<App history={history} />);
         expect(history.location.search).toBe('?namespace=argo&limit=50');
 
         // Click the run button and verify URL updates
         const submitWorkflowButton = getByRole('button', {name: 'Run job'});
         expect(submitWorkflowButton).toBeInTheDocument();
-        submitWorkflowButton.click();
+        fireEvent.click(submitWorkflowButton);
         await waitFor(() => {
             expect(history.location.search).toBe('?namespace=argo&sidePanel=submit-new-workflow&limit=50');
         });
 
-        // Wait for close button, then press it and verify URL updates
-        // TODO: use findByRole once the close button has an aria-label
-        const closeButton = await waitFor<HTMLElement>(() => {
-            const closeButton = container.querySelector<HTMLElement>('button.sliding-panel__close');
-            expect(closeButton).toBeInTheDocument();
-            return closeButton;
-        });
-        closeButton.click();
+        // Close through the panel's labelled button rather than a CSS class, so the
+        // click always targets the live panel instead of a stale or unrelated node.
+        fireEvent.click(getByRole('button', {name: 'Close run job panel'}));
 
         // Check sidePanel was removed from URL.
         await waitFor(() => {
@@ -70,25 +65,18 @@ describe('WorkflowsList', () => {
         const history = createMemoryHistory();
         history.push('/workflows?namespace=argo&phase=Pending&label=test');
 
-        const {getByRole, container} = render(<App history={history} />);
+        const {getByRole} = render(<App history={history} />);
         expect(history.location.search).toBe('?namespace=argo&phase=Pending&label=test&limit=50');
 
         // Click the run button and verify URL updates
         const submitWorkflowButton = getByRole('button', {name: 'Run job'});
         expect(submitWorkflowButton).toBeInTheDocument();
-        submitWorkflowButton.click();
+        fireEvent.click(submitWorkflowButton);
         await waitFor(() => {
             expect(history.location.search).toBe('?namespace=argo&sidePanel=submit-new-workflow&phase=Pending&label=test&limit=50');
         });
 
-        // Wait for close button, then press it and verify URL updates
-        // TODO: use findByRole once the close button has an aria-label
-        const closeButton = await waitFor<HTMLElement>(() => {
-            const closeButton = container.querySelector<HTMLElement>('button.sliding-panel__close');
-            expect(closeButton).toBeInTheDocument();
-            return closeButton;
-        });
-        closeButton.click();
+        fireEvent.click(getByRole('button', {name: 'Close run job panel'}));
 
         // Check sidePanel was removed from URL but phase remains
         await waitFor(() => {

@@ -10,6 +10,8 @@ dist/
 cmd/**/debug
 hack/**/debug
 hack/embeddoc/embeddoc
+hack/configure-github.sh
+hack/publish.sh
 /argo
 /argoexec
 release-notes

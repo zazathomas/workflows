@@ -117,8 +117,17 @@ jobs:
         run: |
           image="ghcr.io/${REPOSITORY,,}"
           docker tag workflows:release "$image:$REF_NAME"
-          docker push "$image:$REF_NAME"
-          digest=$(docker buildx imagetools inspect "$image:$REF_NAME" --format '{{.Manifest.Digest}}')
+          docker push "$image:$REF_NAME" | tee /tmp/push.log
+          # A single-platform build pushes a manifest, not an index, so read the
+          # digest from the inspect output and fall back to the push summary.
+          digest=$(docker buildx imagetools inspect "$image:$REF_NAME" | sed -n 's/^Digest:[[:space:]]*//p' | head -1)
+          if [[ -z "$digest" ]]; then
+            digest=$(sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' /tmp/push.log | tail -1)
+          fi
+          if [[ -z "$digest" ]]; then
+            echo 'Could not read the published digest' >&2
+            exit 1
+          fi
           cosign sign --yes "$image@$digest"
           cosign attest --yes --predicate artifacts/sbom.cdx.json --type cyclonedx "$image@$digest"
           echo "Published $image@$digest"

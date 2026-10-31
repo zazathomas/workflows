@@ -42,7 +42,7 @@ For a UI-only mock backend, see the [repository README](../README.md).
 
 ```bash
 make test-hack
-make compatibility
+make compatibility  # also builds the embedded UI on a fresh clone
 KUBECONFIG=/dev/null GOFLAGS='-mod=mod -tags=kubernetes_protomessage_one_more_release' go test ./server/...
 yarn --cwd ui test --runInBand
 yarn --cwd ui playwright install chromium

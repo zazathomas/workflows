@@ -44,7 +44,12 @@ upstream-versions:
 test-hack:
 	python3 -m unittest discover -s hack/tests
 
-compatibility: upstream-contract
+# The server packages embed ui/dist/app, so a Go build fails on a fresh clone
+# until the UI bundle exists. Build it on demand instead of documenting an order.
+ui/dist/app/index.html:
+	$(MAKE) ui-build
+
+compatibility: upstream-contract ui/dist/app/index.html
 	go test ./server/... ./cmd/argo/... ./pkg/apiclient/... ./api/openapi-spec ./pkg/apis/workflow/v1alpha1
 	go test -tags=api,kubernetes_protomessage_one_more_release ./test/e2e -run '^TestAPIFixturesExist$$'
 

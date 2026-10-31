@@ -1,0 +1,35 @@
+.submit-workflow-panel__review {
+    margin-bottom: 25px;
+    padding: 12px 16px;
+    border: 1px solid #dce6ec;
+    border-radius: 8px;
+    background: #f7fbfc;
+
+    h4 {
+        margin: 0 0 8px;
+        color: #526575;
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    p {
+        margin: 2px 0;
+        color: #334155;
+        font-size: 13px;
+        word-break: break-word;
+    }
+}
+
+.theme-dark .submit-workflow-panel__review {
+    border-color: #334155;
+    background: #1f2937;
+
+    h4 {
+        color: #c6d5e3;
+    }
+
+    p {
+        color: #e5edf5;
+    }
+}

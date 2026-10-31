@@ -1,0 +1,77 @@
+name: workflows CI
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '15 3 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: yarn
+          cache-dependency-path: ui/yarn.lock
+      - run: make cli
+      - name: Fetch registered upstream releases
+        run: python3 hack/fetch-upstream-versions.py
+      - run: make test-hack
+      - run: make compatibility
+      - name: Test all retained Go packages
+        env:
+          KUBECONFIG: /dev/null
+          GOFLAGS: -mod=mod -tags=kubernetes_protomessage_one_more_release
+        run: go test -p 2 ./...
+
+  ui:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: yarn
+          cache-dependency-path: ui/yarn.lock
+      - run: yarn --cwd ui install --frozen-lockfile
+      - run: yarn --cwd ui test --runInBand
+      - run: yarn --cwd ui lint
+      - run: yarn --cwd ui playwright install --with-deps chromium
+      - name: Start UI development server
+        run: |
+          yarn --cwd ui start > /tmp/webpack-dev-server.log 2>&1 &
+          for i in $(seq 1 120); do
+            if curl -fs http://localhost:8080/ > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          tail -n 100 /tmp/webpack-dev-server.log
+          exit 1
+      - run: make test-ui-e2e
+
+  image:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build and run production image
+        run: |
+          docker build --target server --provenance=mode=max --build-arg VERSION=ci --build-arg GIT_COMMIT="$GITHUB_SHA" -t workflows:verify .
+          docker run --rm workflows:verify version
+      - name: Scan source and build dependencies
+        run: |
+          docker run --rm -v "$PWD:/src:ro" \
+            aquasec/trivy:0.67.2@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08 \
+            fs --scanners vuln --include-dev-deps --severity HIGH,CRITICAL --exit-code 1 \
+            --skip-dirs /src/node_modules --skip-dirs /src/ui/node_modules --skip-dirs /src/vendor /src
+      - name: Scan runtime image
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.67.2@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08 \
+            image --image-src docker --scanners vuln --severity HIGH,CRITICAL --exit-code 1 workflows:verify

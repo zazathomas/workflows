@@ -1,0 +1,47 @@
+@import 'node_modules/argo-ui/src/styles/config';
+
+.wf-row-labels {
+  display: flex; 
+  flex-wrap: wrap;
+  align-items: center;
+  height: 100%;
+  $gutter: 0.5em;
+  border-radius: 0 0 3px 3px;
+
+  .tag {
+    line-height: normal;
+    background-color: $argo-color-gray-3;
+    border: 0;
+    border-radius: 3px;
+    padding: 0;
+    font: inherit;
+    height: auto;
+    margin: $gutter 0;
+    margin-right: 10px;
+    display: flex;
+    overflow: hidden;
+    cursor: pointer;
+
+    &:focus-visible {
+      outline: 2px solid #005f73;
+      outline-offset: 2px;
+    }
+
+    &:hover .key {
+      text-decoration: underline;
+    }
+
+    .key, .value {
+      padding: 0.5em 8px;
+    }
+
+    .key {
+      color: #374d5a;
+    }
+
+    .value {
+      color: white;
+      background-color: #006a7d;
+    }
+  }
+}

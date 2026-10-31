@@ -1,0 +1,15 @@
+.chat-button {
+    position: fixed;
+    z-index: 25;
+    right: 16px;
+    bottom: 16px;
+}
+
+@media (max-width: 640px) {
+    .chat-button {
+        position: static;
+        display: flex;
+        justify-content: flex-end;
+        padding: 12px 10px 18px;
+    }
+}

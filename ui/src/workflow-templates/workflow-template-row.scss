@@ -1,0 +1,102 @@
+@import 'node_modules/argo-ui/src/styles/config';
+
+.workflow-templates-list__type {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.workflow-templates-list__name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.workflow-templates-list__badge {
+  align-self: flex-start;
+  padding: 1px 7px;
+  border: 1px solid #c7d8df;
+  border-radius: 999px;
+  color: #355466;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.workflow-templates-list__team {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e7f4f7;
+  color: #00566b;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+
+  &--none {
+    background: transparent;
+    color: #6d7f8b;
+    font-weight: 400;
+  }
+}
+
+.workflow-templates-list__row-container {
+  .argo-table-list__row {
+    line-height: 1.4;
+  }
+
+  [role='cell'] {
+    line-height: 1.4;
+    vertical-align: top;
+  }
+
+  .wf-rows-name {
+    display: -webkit-box;
+    overflow: hidden;
+    padding: 0;
+    line-height: 1.4;
+    white-space: normal;
+    text-overflow: initial;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+
+    p {
+      margin: 0;
+    }
+  }
+}
+
+.theme-dark {
+  .workflow-templates-list__badge {
+    border-color: #475569;
+    color: #c6d5e3;
+  }
+
+  .workflow-templates-list__team {
+    background: #164e63;
+    color: #cffafe;
+
+    &--none {
+      background: transparent;
+      color: #a8b8ca;
+    }
+  }
+}
+
+.workflow-templates-list__description {
+  overflow: hidden;
+  color: #526575;
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+  text-overflow: initial;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.theme-dark .workflow-templates-list__description {
+  color: #a8b8ca;
+}

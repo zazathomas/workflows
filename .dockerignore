@@ -1,0 +1,17 @@
+.git
+.github
+*.md
+*.iml
+.idea
+dist
+node_modules
+**/__pycache__
+**/.env*
+test
+ui/e2e
+ui/test-results
+ui/playwright-report
+docs
+ui/dist
+ui/node_modules
+vendor

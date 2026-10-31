@@ -1,0 +1,26 @@
+.input-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  div:first-child {
+    flex: 1;
+  }
+
+  &__clear {
+    padding: 4px;
+    border: 0;
+    background: transparent;
+    color: #6d7f8b;
+    cursor: pointer;
+    line-height: 1;
+
+    &:hover,
+    &:focus-visible {
+      color: #006f8a;
+      outline: 2px solid currentColor;
+      outline-offset: 2px;
+    }
+  }
+}
+

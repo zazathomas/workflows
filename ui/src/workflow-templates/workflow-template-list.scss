@@ -1,0 +1,91 @@
+@import 'node_modules/argo-ui/src/styles/config';
+
+.argo-table-list {
+  margin: 1em;
+  &__row:hover {
+    box-shadow: 1px 2px 3px rgba($argo-color-gray-9, .1), 0 0 0 1px rgba($argo-color-teal-5, .5);
+  }
+}
+
+.workflow-templates-list {
+  padding: 1em;
+
+  &__row-container {
+    a {
+      color: $argo-color-gray-6;
+    }
+
+    a:hover {
+      color: $argo-color-teal-5;
+    }
+  }
+
+  .row {
+    min-width: 0;
+  }
+}
+
+.job-template-chooser {
+  max-width: 540px;
+  padding-top: 48px;
+
+  fieldset {
+    margin: 24px 0;
+    padding: 0;
+    border: 0;
+  }
+
+  legend {
+    margin-bottom: 12px;
+    font-weight: 700;
+  }
+
+  &__option {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding: 16px;
+    border: 1px solid #b9ccd5;
+    border-radius: 8px;
+    background: #fff;
+    color: #253044;
+    cursor: pointer;
+
+    &:focus-within {
+      outline: 2px solid #006f8a;
+      outline-offset: 2px;
+    }
+
+    input {
+      margin-top: 4px;
+    }
+
+    span, small {
+      display: block;
+    }
+
+    small {
+      margin-top: 4px;
+      color: #526575;
+    }
+  }
+}
+
+.job-template-editor {
+  padding-top: 48px;
+}
+
+.theme-dark .job-template-chooser__option {
+  border-color: #526579;
+  background: #1f2937;
+  color: #e5edf5;
+
+  small {
+    color: #c3d1df;
+  }
+}
+
+.row.pt-60 {
+  padding-top: 60px;
+}

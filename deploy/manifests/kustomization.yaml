@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Render upstream's release manifest with this fork's server image and settings.
+# Follow https://argo-workflows.readthedocs.io/en/latest/installation/ for the
+# install variant (cluster, namespace, or managed namespace) and for the
+# server-side apply requirement.
+#
+# The base is the public release asset for the upstream tag, so nothing is
+# stored in this repository. Rendering needs network access; for an offline or
+# air-gapped build, download the manifest and point resources at that file.
+#
+#   kubectl kustomize deploy/manifests | kubectl apply -n argo --server-side -f -
+resources:
+  - https://github.com/argoproj/argo-workflows/releases/download/v4.1.6/install.yaml
+
+patches:
+  - path: argo-server-patch.yaml
+    target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: argo-server

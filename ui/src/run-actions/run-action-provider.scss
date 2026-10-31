@@ -1,0 +1,97 @@
+.run-action-indicator {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 1100;
+    max-width: min(380px, calc(100vw - 40px));
+    padding: 12px;
+    border: 1px solid #94a3b8;
+    border-radius: 8px;
+    background: #172033;
+    color: #f8fafc;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+
+    button {
+        color: inherit;
+        background: transparent;
+        border: 0;
+        cursor: pointer;
+        font-weight: 700;
+        text-decoration: underline;
+    }
+
+    p {
+        margin: 8px 0 0;
+    }
+
+    ul {
+        margin: 8px 0 0;
+        padding-left: 20px;
+    }
+
+    li {
+        margin-top: 6px;
+    }
+}
+
+.run-action-backdrop {
+    position: fixed;
+    z-index: 2100;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.65);
+}
+
+.run-action-dialog {
+    position: relative;
+    width: min(100%, 480px);
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    padding: 28px;
+    border-radius: 10px;
+    background: #fff;
+    color: #172033;
+    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.4);
+
+    h2 {
+        margin: 0 30px 16px 0;
+        font-size: 22px;
+    }
+
+    &__close {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        border: none;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font-size: 18px;
+    }
+
+    &__code {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 12px;
+        border: 1px solid #94a3b8;
+        border-radius: 6px;
+
+        code {
+            font-size: 18px;
+            font-weight: 700;
+            user-select: all;
+        }
+    }
+
+    &__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 20px 0;
+    }
+}

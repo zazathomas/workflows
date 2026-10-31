@@ -1,0 +1,3 @@
+api/jsonschema/schema.json linguist-generated
+api/openapi-spec/swagger.json linguist-generated
+pkg/client/** linguist-generated

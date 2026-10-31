@@ -1,0 +1,54 @@
+@import 'node_modules/argo-ui/src/components/tabs/tabs.scss';
+
+// The argo-ui Tabs styled anchor elements. This accessible replacement renders
+// buttons, so mirror the anchor styling onto buttons while adding a visible
+// focus ring for keyboard users.
+.tabs__nav {
+    button {
+        display: inline-block;
+        margin: 0 16px;
+        padding: 12px 36px;
+        border: 0;
+        background: transparent;
+        @include themify($themes) {
+            color: themed('light-argo-gray-6');
+        }
+        font-size: 13px;
+        font-weight: 500;
+        text-transform: uppercase;
+        transition: color 0.2s;
+        cursor: pointer;
+        vertical-align: bottom;
+
+        &:first-child {
+            margin-left: 0;
+        }
+
+        &.active {
+            color: $argo-color-teal-5;
+        }
+
+        i {
+            vertical-align: middle;
+            margin-right: 4px;
+            font-size: 18px;
+            color: #aaa;
+        }
+
+        &:focus-visible {
+            border-radius: 4px;
+            outline: 2px solid $argo-color-teal-6;
+            outline-offset: -2px;
+        }
+    }
+
+    &.transparent button {
+        color: $argo-color-teal-5;
+
+        &.active {
+            @include themify($themes) {
+                color: themed('text-2');
+            }
+        }
+    }
+}

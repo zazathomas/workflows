@@ -1,0 +1,124 @@
+name: workflows image release
+
+on:
+  push:
+    tags:
+      # Release tags are the upstream version, such as 4.1.6, plus an optional
+      # fourth component for fork-only fixes on that release, such as 4.1.6.1.
+      - '*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility:
+    uses: ./.github/workflows/compatibility.yaml
+    permissions:
+      contents: read
+
+  release:
+    needs: compatibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require a release tag
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$REF_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+            echo "Tag $REF_NAME is not a release tag; use the upstream version, such as 4.1.6." >&2
+            exit 1
+          fi
+      - name: Require workflows repository name
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if [[ "${REPOSITORY##*/}" != workflows ]]; then
+            echo 'Rename the GitHub repository to workflows before tagging a release.' >&2
+            exit 1
+          fi
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: yarn
+          cache-dependency-path: ui/yarn.lock
+      - name: Fetch registered upstream releases
+        run: python3 hack/fetch-upstream-versions.py
+      - run: make compatibility
+      - name: Test all retained Go packages
+        env:
+          KUBECONFIG: /dev/null
+          GOFLAGS: -mod=mod -tags=kubernetes_protomessage_one_more_release
+        run: go test -p 2 ./...
+      - run: yarn --cwd ui install --frozen-lockfile
+      - run: yarn --cwd ui test --runInBand
+      - run: yarn --cwd ui eslint ./src ./e2e
+      - run: yarn --cwd ui tsc --noEmit
+      - run: yarn --cwd ui e2e:typecheck
+      - run: yarn --cwd ui playwright install --with-deps chromium
+      - name: Test fork UI in a browser
+        run: |
+          yarn --cwd ui start > /tmp/fork-ui-dev.log 2>&1 &
+          for i in $(seq 1 120); do
+            if curl -fsS http://localhost:8080/ >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8080/ >/dev/null
+          make test-ui-e2e
+      - name: Build release image
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version="$REF_NAME"
+          docker build --target server --provenance=mode=max --build-arg VERSION="$version" \
+            --build-arg GIT_COMMIT="$GITHUB_SHA" --build-arg GIT_TAG="$REF_NAME" \
+            --build-arg GIT_TREE_STATE=clean --build-arg BUILD_DATE="$(git show -s --format=%cI HEAD)" \
+            -t workflows:release .
+          docker run --rm workflows:release version
+      - name: Scan source and build dependencies
+        run: |
+          docker run --rm -v "$PWD:/src:ro" \
+            aquasec/trivy:0.67.2@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08 \
+            fs --scanners vuln --include-dev-deps --severity HIGH,CRITICAL --exit-code 1 \
+            --skip-dirs /src/node_modules --skip-dirs /src/ui/node_modules --skip-dirs /src/vendor /src
+      - name: Scan image and generate SBOM
+        run: |
+          mkdir -p artifacts
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/artifacts:/artifacts" aquasec/trivy:0.67.2@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08 \
+            image --image-src docker --scanners vuln --severity HIGH,CRITICAL --exit-code 1 workflows:release
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/artifacts:/artifacts" aquasec/trivy:0.67.2@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08 \
+            image --image-src docker --format cyclonedx --output /artifacts/sbom.cdx.json workflows:release
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: artifacts/sbom.cdx.json
+          if-no-files-found: error
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Publish and sign immutable digest
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          image="ghcr.io/${REPOSITORY,,}"
+          docker tag workflows:release "$image:$REF_NAME"
+          docker push "$image:$REF_NAME"
+          digest=$(docker buildx imagetools inspect "$image:$REF_NAME" --format '{{.Manifest.Digest}}')
+          cosign sign --yes "$image@$digest"
+          cosign attest --yes --predicate artifacts/sbom.cdx.json --type cyclonedx "$image@$digest"
+          echo "Published $image@$digest"

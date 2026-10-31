@@ -1,0 +1,353 @@
+@import 'node_modules/argo-ui/src/styles/config';
+
+.wf-filters-container {
+    position: relative;
+    overflow: visible;
+    margin: 0 0 12px;
+    padding: 12px;
+    border: 1px solid #dce6ec;
+    border-radius: 8px;
+    background-color: white;
+    box-shadow: 1px 1px 3px #8fa4b1;
+}
+
+.wf-filters-container__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e6edf1;
+}
+
+.wf-filters-container__heading-group,
+.wf-filters-container__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.wf-filters-container__actions {
+    justify-content: flex-end;
+}
+
+.wf-filters-container__heading {
+    margin: 0;
+    color: #526575;
+    font-size: 15px;
+    font-weight: 500;
+}
+
+.wf-filters-container__count {
+    color: #526575;
+    font-size: 12px;
+}
+
+.wf-filters-container__clear {
+    padding: 4px;
+    border: 0;
+    background: transparent;
+    color: #006f8a;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.wf-filters-container__clear:hover,
+.wf-filters-container__clear:focus-visible {
+    color: #004c67;
+    text-decoration: underline;
+}
+
+.wf-filters-container__more {
+    display: inline-flex;
+    min-width: 132px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.wf-filters-container__more-count {
+    display: inline-flex;
+    min-width: 20px;
+    height: 20px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: #dff3f6;
+    color: #00566b;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.wf-filters-container__active {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-top: 10px;
+
+    button {
+        padding: 4px 8px;
+        border: 1px solid #93b9c4;
+        border-radius: 16px;
+        background: #edf7f9;
+        color: #004c67;
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+    }
+
+    button:focus-visible {
+        outline: 2px solid #006f8a;
+        outline-offset: 2px;
+    }
+}
+
+.theme-dark .wf-filters-container__active button {
+    border-color: #6b8999;
+    background: #273b49;
+    color: #e5f6f8;
+}
+
+.wf-filters-container__grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px 12px;
+}
+
+.wf-filters-container__grid--primary {
+    padding-top: 8px;
+}
+
+.wf-filters-container__grid--advanced {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e6edf1;
+}
+
+.wf-filters-container__field {
+    min-width: 0;
+}
+
+.wf-filters-container__field--phases,
+.wf-filters-container__field--dates {
+    grid-column: span 2;
+}
+
+.wf-filters-container__field--dates {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.wf-filters-container__title {
+    display: block;
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 0 4px;
+    padding: 0;
+    border: 0;
+    background-color: transparent;
+    color: #526575;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: left;
+}
+
+.wf-filters-container__name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .input-filter,
+    .tags-input {
+        min-width: 0;
+        flex: 1;
+    }
+}
+
+.wf-filters-container__name-kind {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    padding: 0 10px;
+    border: 1px solid #c7d8df;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #334155;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+
+    &:hover,
+    &:focus-visible {
+        border-color: #006f8a;
+        outline: 2px solid #08aeca;
+        outline-offset: 1px;
+    }
+}
+
+.theme-dark .wf-filters-container__name-kind {
+    border-color: #475569;
+    background: #1f2937;
+    color: #e5edf5;
+
+    &:hover,
+    &:focus-visible {
+        border-color: #63d6e2;
+    }
+}
+
+.wf-filters-container__field > .argo-field,
+.wf-filters-container__field > .select,
+.wf-filters-container__field > .tags-input {
+    width: 100%;
+}
+
+.wf-filters-container__field .argo-field,
+.wf-filters-container__field .select__value {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    font-size: 14px;
+}
+
+.wf-filters-container__field .tags-input {
+    min-height: 34px;
+    line-height: 22px;
+}
+
+.wf-filters-container__field .tags-input input {
+    margin-top: 0.4em;
+    margin-bottom: 0.4em;
+}
+
+.wf-filters-container__field--phases .checkbox-filter {
+    width: 100%;
+    max-height: none;
+    margin: 0;
+    overflow: visible;
+    grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+}
+
+.wf-filters-container__field--phases .checkbox-filter__label {
+    width: 100%;
+    margin-right: 0;
+}
+
+.wf-filters-container__content {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .react-datepicker-wrapper,
+    .react-datepicker__input-container {
+        width: 100%;
+    }
+}
+
+.wf-filters-container__date-clear {
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #006f8a;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+        background: #e7f4f7;
+        outline: 2px solid #006f8a;
+        outline-offset: 1px;
+    }
+}
+
+#top-bar__filter-list {
+    column-count: 1;
+
+    button {
+        width: 100%;
+        padding: 10px 14px;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font: inherit;
+        text-align: left;
+
+        &:hover,
+        &:focus-visible {
+            background: #e7f4f7;
+            outline: none;
+        }
+    }
+}
+
+@media (max-width: 1100px) {
+    .wf-filters-container__grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .wf-filters-container {
+        padding: 12px;
+    }
+
+    .wf-filters-container__header {
+        align-items: flex-start;
+    }
+
+    .wf-filters-container__actions {
+        flex-wrap: wrap;
+    }
+
+    .wf-filters-container__grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .wf-filters-container__field--phases,
+    .wf-filters-container__field--dates {
+        grid-column: auto;
+    }
+
+    .wf-filters-container__field--dates {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+
+.wf-filters-container input[type='checkbox'],
+.wf-filters-container input[type='radio'],
+.wf-filters-container select,
+.wf-filters-container input {
+    accent-color: #006f8a;
+}
+
+.wf-filters-container select:focus-visible,
+.wf-filters-container input:focus-visible,
+.wf-filters-container button:focus-visible {
+    outline: 2px solid #08aeca;
+    outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+    .wf-filters-container__field--secondary {
+        display: none;
+    }
+
+    .wf-filters-container--show-secondary .wf-filters-container__field--secondary {
+        display: block;
+    }
+}

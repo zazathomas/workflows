@@ -1,0 +1,22 @@
+.timestamp-switch {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-left: 4px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    vertical-align: middle;
+
+    &:hover,
+    &:focus-visible {
+        background: rgba(8, 174, 202, 0.12);
+        outline: 2px solid #08aeca;
+        outline-offset: 1px;
+    }
+}

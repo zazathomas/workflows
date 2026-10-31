@@ -1,0 +1,22 @@
+# Merge patch applied to the argo-server Deployment from upstream's install.yaml
+# before it is applied. Containers and env entries merge by name; `args` is a
+# plain list and is replaced, which is how the auth mode changes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argo-server
+spec:
+  template:
+    spec:
+      containers:
+        - name: argo-server
+          # Replace this with the signed GHCR digest from a published release.
+          image: ghcr.io/zazathomas/workflows@sha256:REPLACE_WITH_RELEASE_DIGEST
+          args: [server, --auth-mode=client]
+          env:
+            # Leave empty to disable HTTPS URL sources until trusted hosts are selected.
+            - name: ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS
+              value: ''
+            # List approved identity-provider hosts to enable Run action links.
+            - name: ARGO_SERVER_RUN_ACTION_ALLOW_HOSTS
+              value: ''

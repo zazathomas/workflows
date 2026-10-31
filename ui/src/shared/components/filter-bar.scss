@@ -1,0 +1,317 @@
+@import 'node_modules/argo-ui/src/styles/config';
+
+.filter-bar {
+    position: relative;
+    overflow: visible;
+    margin: 10px 16px 14px;
+    padding: 12px;
+    border: 1px solid #dce6ec;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 1px 1px 3px #8fa4b1;
+
+    &__results {
+        padding: 0 16px 16px;
+
+        > .argo-table-list {
+            margin-right: 0;
+            margin-left: 0;
+        }
+    }
+
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #e6edf1;
+    }
+
+    &__heading-group,
+    &__actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    &__heading {
+        margin: 0;
+        color: #526575;
+        font-size: 15px;
+        font-weight: 600;
+    }
+
+    &__count {
+        color: #526575;
+        font-size: 12px;
+    }
+
+    &__clear {
+        padding: 4px;
+        border: 0;
+        background: transparent;
+        color: #006f8a;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 700;
+
+        &:hover,
+        &:focus-visible {
+            color: #004c67;
+            text-decoration: underline;
+        }
+    }
+
+    &__more {
+        display: inline-flex;
+        min-width: 132px;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        white-space: nowrap;
+    }
+
+    &__more-count {
+        display: inline-flex;
+        min-width: 20px;
+        height: 20px;
+        align-items: center;
+        justify-content: center;
+        padding: 0 6px;
+        border-radius: 10px;
+        background: #dff3f6;
+        color: #00566b;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    &__grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px 12px;
+        padding-top: 8px;
+
+        &--two {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        &--advanced {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e6edf1;
+        }
+    }
+
+    &__search {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+
+        > select {
+            width: auto;
+            min-width: 238px;
+            max-width: 60%;
+        }
+
+        > .input-filter,
+        > .tags-input {
+            flex: 1;
+            min-width: 0;
+        }
+    }
+
+    &__active {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding-top: 8px;
+
+        button {
+            border: 1px solid currentColor;
+            border-radius: 4px;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            padding: 3px 6px;
+        }
+    }
+
+    &__field {
+        min-width: 0;
+
+        > .argo-field,
+        > .select,
+        > .tags-input {
+            width: 100%;
+        }
+
+        .argo-field,
+        .select__value {
+            padding-top: 6px;
+            padding-bottom: 6px;
+            font-size: 14px;
+        }
+
+        .tags-input {
+            min-height: 34px;
+            line-height: 22px;
+        }
+
+        .tags-input input {
+            margin-top: 0.4em;
+            margin-bottom: 0.4em;
+        }
+    }
+
+    &__title {
+        display: block;
+        width: 100%;
+        margin: 0 0 4px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: #526575;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 18px;
+        text-align: left;
+    }
+
+    &__field .checkbox-filter {
+        width: 100%;
+        max-height: none;
+        margin: 0;
+        overflow: visible;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    }
+
+    &__field .checkbox-filter__label {
+        width: 100%;
+        margin-right: 0;
+    }
+
+    &__options {
+        display: flex;
+        min-height: 38px;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 20px;
+    }
+
+    &__option {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: #334155;
+        font-size: 13px;
+
+        input {
+            margin: 0;
+        }
+    }
+}
+
+.filter-bar .argo-checkbox input {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: 0;
+}
+
+.filter-bar {
+    input[type='checkbox'],
+    input[type='radio'] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+
+    input[type='checkbox'],
+    input[type='radio'],
+    select:focus-visible,
+    input:focus-visible,
+    button:focus-visible {
+        accent-color: #006f8a;
+        outline: 2px solid #08aeca;
+        outline-offset: 2px;
+    }
+}
+
+.theme-dark .filter-bar {
+    border-color: #334155;
+    background: #1f2937;
+    color: #e5edf5;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+
+    &__header,
+    &__grid--advanced {
+        border-color: #475569;
+    }
+
+    &__heading,
+    &__count,
+    &__title {
+        color: #c6d5e3;
+    }
+
+    &__clear {
+        color: #9fe8ef;
+    }
+
+    &__more-count {
+        background: #164e63;
+        color: #cffafe;
+    }
+
+    &__option {
+        color: #e5edf5;
+    }
+}
+
+@media (max-width: 900px) {
+    .filter-bar__grid,
+    .filter-bar__grid--two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .filter-bar {
+        padding: 12px;
+
+        &__header {
+            align-items: flex-start;
+        }
+
+        &__search {
+            flex-direction: column;
+
+            > select {
+                width: 100%;
+                max-width: none;
+            }
+
+            > .input-filter,
+            > .tags-input {
+                width: 100%;
+            }
+        }
+
+        &__actions {
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        &__grid,
+        &__grid--two {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+}
+
+.events-page__filters {
+    width: min(100%, 420px);
+    max-width: 420px;
+    margin: 0 0 16px;
+}

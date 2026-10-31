@@ -1,0 +1,199 @@
+@import 'node_modules/argo-ui/src/styles/config';
+
+.login {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--login-background);
+    color: var(--login-text-primary);
+
+    &--dark {
+        color-scheme: dark;
+        --login-background: linear-gradient(180deg, #090f1c 0%, #111827 100%);
+        --login-card-bg: #1f2937;
+        --login-card-border: #334155;
+        --login-card-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+        --login-title: #f8fafc;
+        --login-text-primary: #e5edf5;
+        --login-text-secondary: #a8b8ca;
+        --login-text-muted: #c6d5e3;
+        --login-panel-bg: #172033;
+        --login-panel-border: #334155;
+        --login-input-bg: #0b1120;
+        --login-input-border: #475569;
+        --login-input-text: #e5edf5;
+        --login-link: #9fe8ef;
+        --login-switch: #5eead4;
+        --login-switch-hover: #99f6e4;
+        --login-footer: #8f9db2;
+        --login-focus: #22d3ee;
+    }
+
+    &--light {
+        color-scheme: light;
+        --login-background: linear-gradient(180deg, #eef3f6 0%, #f4f7f9 100%);
+        --login-card-bg: #ffffff;
+        --login-card-border: #dce6ec;
+        --login-card-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+        --login-title: #172033;
+        --login-text-primary: #263442;
+        --login-text-secondary: #607086;
+        --login-text-muted: #526575;
+        --login-panel-bg: #f7fbfc;
+        --login-panel-border: #e6edf1;
+        --login-input-bg: #ffffff;
+        --login-input-border: #c7d8df;
+        --login-input-text: #263442;
+        --login-link: #006f8a;
+        --login-switch: #006f8a;
+        --login-switch-hover: #004c67;
+        --login-footer: #8491a5;
+        --login-focus: #08aeca;
+    }
+
+    &__card {
+        width: 100%;
+        max-width: 420px;
+        padding: 40px 36px 24px;
+        border: 1px solid var(--login-card-border);
+        border-radius: 16px;
+        background: var(--login-card-bg);
+        box-shadow: var(--login-card-shadow);
+        text-align: center;
+    }
+
+    &__brand {
+        margin-bottom: 28px;
+    }
+
+    &__logo {
+        width: 64px;
+        height: 64px;
+        border-radius: 16px;
+        object-fit: contain;
+    }
+
+    &__title {
+        margin: 16px 0 4px;
+        color: var(--login-title);
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+    }
+
+    &__subtitle {
+        margin: 0;
+        color: var(--login-text-secondary);
+        font-size: 14px;
+    }
+
+    &__panel {
+        padding: 20px;
+        border: 1px solid var(--login-panel-border);
+        border-radius: 12px;
+        background: var(--login-panel-bg);
+        text-align: left;
+    }
+
+    &__panel-title {
+        margin: 0 0 4px;
+        color: var(--login-text-primary);
+        font-size: 15px;
+        font-weight: 700;
+    }
+
+    &__panel-hint {
+        margin: 0 0 16px;
+        color: var(--login-text-secondary);
+        font-size: 13px;
+    }
+
+    &__label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--login-text-muted);
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    &__token-input {
+        width: 100%;
+        margin-bottom: 14px;
+        padding: 10px;
+        border: 1px solid var(--login-input-border);
+        border-radius: 8px;
+        background: var(--login-input-bg);
+        color: var(--login-input-text);
+        font: inherit;
+        resize: vertical;
+
+        &:focus-visible {
+            outline: 2px solid var(--login-focus);
+            outline-offset: 1px;
+        }
+    }
+
+    &__submit {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .argo-button--base:not(.disabled):not([disabled]) {
+        border: 0;
+        background: #006f8a;
+        color: #ffffff;
+
+        &:hover,
+        &:focus-visible {
+            background: #005f73;
+            color: #ffffff;
+            outline: 2px solid var(--login-focus);
+            outline-offset: 2px;
+        }
+    }
+
+    &__switch {
+        display: block;
+        width: 100%;
+        margin-top: 14px;
+        padding: 6px 0;
+        border: 0;
+        background: transparent;
+        color: var(--login-switch);
+        cursor: pointer;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        text-align: center;
+
+        &:hover,
+        &:focus-visible {
+            color: var(--login-switch-hover);
+            text-decoration: underline;
+            outline: none;
+        }
+    }
+
+    &__footer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 24px;
+        color: var(--login-footer);
+        font-size: 13px;
+
+        a {
+            color: var(--login-link);
+            text-decoration: none;
+
+            &:hover,
+            &:focus-visible {
+                text-decoration: underline;
+            }
+        }
+    }
+}

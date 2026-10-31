@@ -1,0 +1,126 @@
+name: workflows compatibility matrix
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '45 3 * * *'
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'contract only, or contract plus a disposable-cluster run for every registered release'
+        type: choice
+        default: full
+        options:
+          - full
+          - contract
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compatibility-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  registry:
+    runs-on: ubuntu-24.04
+    outputs:
+      versions: ${{ steps.read.outputs.versions }}
+      baseline: ${{ steps.read.outputs.baseline }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Read supported releases
+        id: read
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, pathlib
+          registry = json.loads(pathlib.Path('hack/upstream-versions.json').read_text())
+          matrix = [
+              {
+                  'tag': entry['tag'],
+                  'commit': entry['commit'],
+                  'sha256': entry['installManifestSha256'],
+                  'chart': entry['helmChartVersion'],
+              }
+              for entry in registry['versions']
+          ]
+          print(f"baseline={registry['baseline']}")
+          print('versions=' + json.dumps(matrix, separators=(',', ':')))
+          PY
+
+  contract:
+    needs: registry
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(needs.registry.outputs.versions) }}
+    name: contract ${{ matrix.version.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Fetch ${{ matrix.version.tag }}
+        run: git fetch --no-tags --depth=1 https://github.com/argoproj/argo-workflows.git "refs/tags/${{ matrix.version.tag }}:refs/tags/${{ matrix.version.tag }}"
+      - name: Compare the API contract
+        run: python3 hack/verify-upstream-contract.py --tag "${{ matrix.version.tag }}"
+
+  image:
+    needs: registry
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build the server image once for every release
+        run: |
+          docker build --target server --provenance=mode=max \
+            --build-arg VERSION=compatibility \
+            --build-arg GIT_COMMIT="$GITHUB_SHA" \
+            --build-arg GIT_TAG=compatibility \
+            --build-arg GIT_TREE_STATE=clean \
+            --build-arg BUILD_DATE="$(git show -s --format=%cI HEAD)" \
+            -t workflows:compatibility .
+          docker run --rm workflows:compatibility version
+          docker save workflows:compatibility | gzip -1 > workflows-image.tar.gz
+          ls -lh workflows-image.tar.gz
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: workflows-image
+          path: workflows-image.tar.gz
+          retention-days: 3
+          if-no-files-found: error
+
+  conformance:
+    needs:
+      - registry
+      - image
+    if: |
+      github.event_name == 'workflow_call' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(needs.registry.outputs.versions) }}
+    name: conformance ${{ matrix.version.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: workflows-image
+      - name: Load the server image
+        run: docker load < workflows-image.tar.gz
+      - name: Install kind
+        run: go install sigs.k8s.io/kind@v0.30.0
+      - name: Run the conformance suite for ${{ matrix.version.tag }}
+        env:
+          ARGO_CONFORMANCE_VERSION: ${{ matrix.version.tag }}
+          KIND: /home/runner/go/bin/kind
+        run: bash hack/conformance-version.sh "$ARGO_CONFORMANCE_VERSION" workflows:compatibility

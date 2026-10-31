@@ -1,0 +1,36 @@
+.workflow-logs-viewer {
+  .select {
+    width: auto;
+  }
+
+  &__verbose-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+}
+
+.log-box {
+  min-height: 500px;
+  max-height: 800px;
+  padding: 10px;
+  margin: 10px;
+  background-color: white;
+}
+
+.log-menu {
+  display: flex;
+  column-gap: 12px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.theme-dark .log-box {
+  border: 1px solid #334155;
+  background: #111827;
+  color: #e5edf5;
+}

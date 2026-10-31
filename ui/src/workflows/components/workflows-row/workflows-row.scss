@@ -1,0 +1,156 @@
+@import 'node_modules/argo-ui/src/styles/config';
+
+.wf-rows-name {
+    overflow: hidden;
+    padding: 0.25em 0;
+    line-height: 2.5em;
+    text-overflow: ellipsis;
+    text-wrap: nowrap;
+    white-space: pre-line;
+
+    & > * {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+.workflows-row__phase {
+    display: block;
+    color: #526879;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.theme-dark .workflows-row__phase {
+    color: #c3d1df;
+}
+
+.workflows-row__action {
+    padding: 5px 7px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: #355466;
+    cursor: pointer;
+    font: inherit;
+    text-transform: uppercase;
+
+    &:hover,
+    &:focus-visible {
+        background: #e7f4f7;
+        color: #006f8a;
+        outline: 2px solid #006f8a;
+        outline-offset: 1px;
+    }
+}
+
+.workflows-row__mobile-card {
+    display: none;
+}
+
+.theme-dark .workflows-row__action {
+    color: #9fe8ef;
+
+    &:hover,
+    &:focus-visible {
+        background: #273548;
+        color: #cffafe;
+        outline-color: #5eead4;
+    }
+}
+
+@media (max-width: 640px) {
+    .workflows-row__desktop {
+        display: none;
+    }
+
+    .workflows-row__mobile-card {
+        display: block;
+        margin: 0;
+        padding: 16px;
+        border-bottom: 1px solid #dce6ec;
+        background: #ffffff;
+    }
+
+    .workflows-row__mobile-header,
+    .workflows-row__mobile-title,
+    .workflows-row__mobile-actions {
+        display: flex;
+        align-items: center;
+    }
+
+    .workflows-row__mobile-header {
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .workflows-row__mobile-title {
+        min-width: 0;
+        gap: 9px;
+        font-size: 15px;
+        font-weight: 700;
+
+        a {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    .workflows-row__mobile-message {
+        margin: 10px 0 14px;
+        color: #52606d;
+        font-size: 13px;
+    }
+
+    .workflows-row__mobile-metadata {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px 18px;
+        margin: 0 0 16px;
+
+        div {
+            min-width: 0;
+        }
+
+        dt {
+            color: #607086;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        dd {
+            margin: 3px 0 0;
+            overflow: hidden;
+            color: #263442;
+            font-size: 13px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    .workflows-row__mobile-actions {
+        flex-wrap: wrap;
+        gap: 8px;
+
+        .argo-button {
+            margin: 0;
+        }
+    }
+
+    .theme-dark & .workflows-row__mobile-card {
+        border-bottom-color: #334155;
+        background: #1f2937;
+    }
+
+    .theme-dark & .workflows-row__mobile-message,
+    .theme-dark & .workflows-row__mobile-metadata dt {
+        color: #a8b8ca;
+    }
+
+    .theme-dark & .workflows-row__mobile-metadata dd {
+        color: #e5edf5;
+    }
+}

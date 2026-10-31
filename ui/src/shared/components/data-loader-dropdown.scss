@@ -1,0 +1,36 @@
+.data-loader-dropdown__loading,
+.data-loader-dropdown__error {
+    min-height: 38px;
+    padding: 9px 0;
+    color: #52606d;
+    font-size: 13px;
+}
+
+.data-loader-dropdown__error {
+    color: #9f1239;
+}
+
+.data-loader-dropdown__retry {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #006f8a;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+}
+
+.theme-dark {
+    .data-loader-dropdown__loading {
+        color: #c6d5e3;
+    }
+
+    .data-loader-dropdown__error {
+        color: #fda4af;
+    }
+
+    .data-loader-dropdown__retry {
+        color: #9fe8ef;
+    }
+}

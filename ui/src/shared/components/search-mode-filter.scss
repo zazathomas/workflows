@@ -1,0 +1,43 @@
+.search-mode-filter {
+    display: block;
+    width: 100%;
+    text-align: left;
+
+    &__row {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    &__mode {
+        flex: 0 0 auto;
+        width: auto;
+        max-width: 60%;
+    }
+
+    .input-filter {
+        flex: 1;
+        min-width: 0;
+    }
+
+    &__hint {
+        display: block;
+        margin-top: 4px;
+        text-align: left;
+    }
+}
+
+@media (max-width: 640px) {
+    .search-mode-filter__row {
+        flex-direction: column;
+    }
+
+    .search-mode-filter__mode {
+        width: 100%;
+        max-width: none;
+    }
+
+    .search-mode-filter .input-filter {
+        width: 100%;
+    }
+}

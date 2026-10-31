@@ -1,0 +1,48 @@
+@import 'node_modules/argo-ui/src/styles/config';
+
+.cron-workflows-list__row-container {
+  .argo-table-list__row {
+    line-height: 1.4;
+  }
+
+  [role='cell'] {
+    line-height: 1.4;
+    vertical-align: top;
+  }
+}
+
+.cron-workflow-schedules {
+  &__item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2em;
+    margin-bottom: 0.5em;
+    overflow-wrap: anywhere;
+
+    code {
+      background: transparent;
+      border: 0;
+      padding: 0;
+      color: inherit;
+      font-family: monospace;
+    }
+  }
+
+  &__item:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.wf-rows-name {
+  line-height: 2.5em;
+  white-space: pre-line;
+  text-wrap: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0.25em 0;
+
+  & > * {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

@@ -1,0 +1,523 @@
+@import 'node_modules/argo-ui/src/styles/config';
+
+.workflow-details-page {
+    .white-box__details .row.white-box__details-row {
+        padding: 0;
+        line-height: 1.5;
+    }
+
+    .white-box__details .row.white-box__details-row > div {
+        padding-top: 6px;
+        padding-bottom: 6px;
+    }
+
+    .page--has-toolbar {
+        padding-top: $top-bar-height;
+    }
+
+    .page__top-bar {
+        height: $top-bar-height;
+
+        > div > .top-bar.row {
+            display: none;
+        }
+    }
+
+    .page__content-wrapper {
+        min-height: calc(100vh - #{$top-bar-height});
+    }
+}
+
+.workflow-details {
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-y: hidden;
+
+    &,
+    & > .row {
+        height: calc(100vh - 2 * #{$top-bar-height});
+    }
+
+    &__content {
+        padding: 1em;
+    }
+
+    &__section {
+        margin-top: 24px;
+
+        > h5 {
+            margin: 0 0 12px;
+        }
+    }
+
+    .workflow-summary__details > summary {
+        cursor: pointer;
+
+        h5 {
+            display: inline;
+        }
+    }
+
+    .workflow-summary__details[open] > summary {
+        margin-bottom: 12px;
+    }
+
+    &__command-bar {
+        position: relative;
+        z-index: 10;
+        display: flex;
+        min-height: $top-bar-height;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 0;
+        padding: 7px 18px;
+        border-bottom: 1px solid $argo-color-gray-3;
+        background: white;
+    }
+
+    &__actions {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 6px;
+
+        .argo-button {
+            margin: 0;
+            white-space: nowrap;
+        }
+    }
+
+    &__primary-action {
+        background: #006f8a !important;
+        color: white !important;
+    }
+
+    &__more-menu {
+        display: flex;
+        min-width: 210px;
+        flex-direction: column;
+        margin: 0;
+        padding: 6px;
+        list-style: none;
+
+        button {
+            display: flex;
+            width: 100%;
+            align-items: center;
+            gap: 9px;
+            padding: 10px 12px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: #334155;
+            cursor: pointer;
+            font: inherit;
+            text-align: left;
+
+            &:hover,
+            &:focus-visible {
+                background: #e7f4f7;
+                outline: none;
+            }
+        }
+    }
+
+    &__danger-action {
+        color: #b42318 !important;
+        font-weight: 700 !important;
+    }
+
+    &__topbar-buttons {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        white-space: nowrap;
+
+        .workflow-details__live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-left: 6px;
+            padding: 5px 8px;
+            border: 1px solid rgba(24, 190, 148, 0.35);
+            border-radius: 999px;
+            color: #087b60;
+            font-size: 12px;
+            font-weight: 600;
+
+            .fa-circle {
+                font-size: 7px;
+            }
+
+            &--offline {
+                border-color: rgba(180, 120, 0, 0.35);
+                color: #7a5200;
+            }
+        }
+
+        .workflow-details__live-updated {
+            margin-left: 3px;
+            color: #526575;
+            font-size: 11px;
+            font-weight: normal;
+        }
+
+        > button {
+            display: inline-flex;
+            min-height: 36px;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-right: 4px;
+            padding: 0 8px;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            background: transparent;
+            color: $argo-color-gray-8;
+            cursor: pointer;
+            font-size: 1.1em;
+
+            &:hover,
+            &:focus-visible {
+                background: $argo-color-gray-2;
+                outline: 2px solid #08aeca;
+                outline-offset: 1px;
+            }
+
+            &.active {
+                border-color: $argo-color-gray-4;
+                background-color: $argo-color-gray-3;
+            }
+        }
+    }
+
+    &__container {
+        height: calc(100vh - 2 * #{$top-bar-height});
+        max-width: 100%;
+        overflow: auto;
+    }
+
+    &__graph-container-wrapper {
+        display: flex;
+    }
+
+    &__graph-container {
+        position: relative;
+        min-width: 490px;
+        height: calc(100vh - 2 * #{$top-bar-height});
+        flex: 1;
+        float: left;
+        overflow: auto;
+
+        .workflow-dag {
+            margin: 0;
+        }
+
+        .workflow-timeline {
+            min-height: calc(100vh - 2 * #{$top-bar-height});
+        }
+    }
+
+    &__step-info {
+        min-height: calc(100vh - 2 * #{$top-bar-height});
+        border-left: 1px solid $argo-color-gray-4;
+        transition: width 0.2s;
+        position: relative;
+    }
+
+    &__step-info-close {
+        display: none;
+        position: absolute;
+        cursor: pointer;
+        top: 1em;
+        right: 1em;
+        z-index: 8;
+        border-radius: 50%;
+        color: $argo-color-gray-5;
+        font-size: 20px;
+        padding: 5px;
+
+        @media screen and (max-width: $argo-breakpoint-md) {
+            top: 8px;
+        }
+
+        &:hover {
+            background-color: $argo-color-gray-4;
+        }
+    }
+
+    &__step-info-drag-handle {
+        left: -6px;
+        height: 100%;
+        position: absolute;
+        width: 12px;
+        z-index: 1;
+
+        &:hover {
+            cursor: ew-resize;
+        }
+    }
+
+    &__attribute-grid {
+        color: $argo-color-gray-8;
+        display: grid;
+        grid-template-columns: auto minmax(50%, 1fr);
+
+        & > * {
+            align-items: center;
+            display: flex;
+            min-height: 50px;
+            padding: 14px 0;
+        }
+
+        & > *:nth-child(odd) {
+            padding-right: 4em;
+        }
+
+        & > *:not(:nth-last-child(-n + 2)) {
+            border-bottom: 1px solid $argo-color-gray-3;
+        }
+
+        pre {
+            overflow: unset;
+        }
+    }
+
+    &--step-node-expanded &__step-info-close {
+        display: block;
+    }
+}
+
+.theme-dark .workflow-details {
+    &__command-bar {
+        border-bottom-color: #334155;
+        background: #111827;
+    }
+
+    &__more-menu button {
+        color: #e5edf5;
+
+        &:hover,
+        &:focus-visible {
+            background: #273548;
+        }
+    }
+
+    &__topbar-buttons {
+        .workflow-details__live-indicator {
+            color: #5eead4;
+        }
+
+        .workflow-details__live-updated {
+            color: #a8b8ca;
+        }
+    }
+
+    &__topbar-buttons > button {
+        color: #dbeafe;
+
+        &:hover,
+        &:focus-visible,
+        &.active {
+            border-color: #475569;
+            background: #273548;
+        }
+    }
+
+    &__attribute-grid {
+        color: #e5edf5;
+
+        & > *:not(:nth-last-child(-n + 2)) {
+            border-bottom-color: #475569;
+        }
+    }
+
+    .row.header {
+        border-bottom-color: #475569;
+        background: #273548;
+        color: #e5edf5;
+    }
+
+    .artifact-row {
+        border-bottom-color: #475569;
+        color: #e5edf5;
+
+        &:hover {
+            background: #273548;
+        }
+    }
+}
+
+@media (max-width: 640px) {
+    .argo-dropdown__content.is-menu {
+        right: 10px;
+        left: 10px !important;
+        width: auto;
+        max-width: none;
+        box-sizing: border-box;
+
+        ul {
+            min-width: 0;
+            column-count: 1;
+            white-space: normal;
+        }
+    }
+
+    .workflow-details__actions-menu {
+        right: 10px;
+        left: auto !important;
+        width: min(240px, calc(100vw - 20px));
+    }
+
+    .workflow-details {
+        &__command-bar {
+            min-height: 102px;
+            align-items: stretch;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 0;
+            padding: 8px 10px;
+        }
+
+        &,
+        & > .row,
+        &__container,
+        &__graph-container,
+        &__step-info {
+            height: calc(100vh - 3 * #{$top-bar-height});
+            min-height: 0;
+        }
+
+        &__actions {
+            width: 100%;
+            max-width: 100%;
+            overflow-x: auto;
+            padding: 2px;
+        }
+
+        &__more-menu {
+            width: min(240px, calc(100vw - 32px));
+            min-width: 0;
+        }
+
+        &__topbar-buttons {
+            width: 100%;
+            justify-content: flex-start;
+            overflow-x: auto;
+        }
+
+        &__live-updated {
+            display: none;
+        }
+
+        &__graph-container {
+            min-width: 0;
+        }
+
+        &__graph-container-wrapper {
+            width: 100%;
+            min-width: 0;
+            overflow: hidden;
+        }
+    }
+}
+
+.badge {
+    position: absolute;
+    margin-left: -0.3%;
+    margin-top: -0.3%;
+    font-size: 30%;
+    padding: 0.6em;
+    border-radius: 999px;
+    line-height: 0.75em;
+    color: white;
+    background: rgba(255, 0, 0, 0.85);
+    text-align: center;
+    min-width: 2em;
+    font-weight: bold;
+    min-height: 2em;
+}
+
+.row.header {
+    color: $argo-color-gray-8;
+    background-color: $argo-color-gray-1;
+    border-bottom: 1px solid $argo-color-gray-5;
+    display: flex;
+    line-height: 1.2em;
+    padding: 4px 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &:hover {
+        overflow: visible;
+        white-space: normal;
+    }
+
+    .columns {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        word-wrap: break-word;
+        word-break: break-all;
+        overflow-wrap: break-word;
+        text-align: left;
+        padding-left: 0;
+
+        &:hover {
+            overflow: visible;
+            white-space: normal;
+        }
+    }
+}
+
+.hoverable {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: all 0.2s ease-in-out;
+    word-wrap: break-word;
+    word-break: break-all;
+    overflow-wrap: break-word;
+
+    &:hover {
+        overflow: visible;
+        white-space: normal;
+        position: relative;
+        z-index: 1;
+    }
+}
+
+.artifact-row {
+    color: $argo-color-gray-8;
+    display: flex;
+    border-bottom: 1px solid $argo-color-gray-5;
+    padding: 8px 0;
+    text-align: left;
+
+    &:hover {
+        background-color: $argo-color-gray-3;
+    }
+
+    .columns {
+        padding-left: 0;
+
+        &.artifact-name {
+            display: flex;
+
+            a {
+                margin-right: 1em;
+                text-decoration: none;
+            }
+
+            .artifact-name-text {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+        }
+    }
+}

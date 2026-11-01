@@ -59,6 +59,13 @@ spec:
             start=$(curl -sS -X POST https://github.com/login/device/code \
               -H 'Accept: application/json' \
               -d "client_id=${client_id}&scope=${scope}")
+            start_error=$(json_field "$start" error)
+            if [ -n "$start_error" ]; then
+              echo "GitHub rejected the device flow request: ${start_error}" >&2
+              echo "The clientId parameter must be an OAuth App client ID with device flow enabled." >&2
+              echo "Leave clientId empty to see the demo prompt instead." >&2
+              exit 1
+            fi
             device_code=$(json_field "$start" device_code)
             user_code=$(json_field "$start" user_code)
             verification_uri=$(json_field "$start" verification_uri)

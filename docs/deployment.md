@@ -27,7 +27,7 @@ Use the chart version from the compatibility matrix, and leave `controller.image
        tag: '4.1.6@sha256:DIGEST'
      extraEnv:
        - name: ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS
-         value: 'catalog.example.com'
+         value: 'gist.github.com'
        - name: ARGO_SERVER_RUN_ACTION_ALLOW_HOSTS
          value: 'github.com,login.microsoftonline.com'
    ```

@@ -1,10 +1,3 @@
-# argo/argo-workflows chart 2.0.14 (upstream app v4.1.6).
-# Merge into the EXISTING Helm release; do not install a second server.
-# Replace the product release tag and its verified signed digest if this file is reused elsewhere.
-# The tag is the upstream version this image targets (4.1.6); one image serves
-# every release in docs/compatibility.md.
-# This chart renders server.image.tag after a colon, so tag@sha256:DIGEST
-# produces the valid image reference ghcr.io/zazathomas/workflows:TAG@sha256:DIGEST.
 server:
   image:
     registry: ghcr.io

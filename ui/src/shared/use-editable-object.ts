@@ -22,11 +22,32 @@ interface State<T> {
 const defaultLang = 'yaml';
 const storage = new ScopedLocalStorage('object-editor');
 
+/**
+ * Editing a manifest usually means pasting a document that has no server-owned
+ * metadata. Keeping the loaded resourceVersion and uid lets the existing object
+ * be updated instead of rejected with "metadata.resourceVersion: Invalid value: 0".
+ */
+function keepServerMetadata<T>(next: T, previous?: T): T {
+    const nextMetadata = (next as any)?.metadata;
+    const previousMetadata = (previous as any)?.metadata;
+    if (!nextMetadata || !previousMetadata) {
+        return next;
+    }
+    const metadata = {...nextMetadata};
+    if (metadata.resourceVersion === undefined && previousMetadata.resourceVersion !== undefined) {
+        metadata.resourceVersion = previousMetadata.resourceVersion;
+    }
+    if (metadata.uid === undefined && previousMetadata.uid !== undefined) {
+        metadata.uid = previousMetadata.uid;
+    }
+    return {...next, metadata};
+}
+
 export function reducer<T>(state: State<T>, action: Action<T>) {
     const newState = {...state};
     switch (action.type) {
         case 'setObject':
-            newState.object = action.payload.object;
+            newState.object = keepServerMetadata(action.payload.object, state.object);
             newState.serialization = action.payload.serialization ?? stringify(newState.object, newState.lang);
             newState.edited = newState.initialSerialization !== newState.serialization;
             return newState;

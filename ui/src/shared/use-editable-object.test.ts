@@ -22,6 +22,30 @@ describe('createInitialState', () => {
     });
 });
 
+describe('editing a loaded object', () => {
+    const loaded = {
+        metadata: {name: 'sample', namespace: 'argo', resourceVersion: '12345', uid: 'abc-123'},
+        spec: {entrypoint: 'main'}
+    };
+    const state = createInitialState(loaded);
+
+    test('keeps resourceVersion when a pasted manifest omits it', () => {
+        const next = reducer(
+            state,
+            setObjectActionCreator<typeof loaded>(
+                'apiVersion: argoproj.io/v1alpha1\nkind: WorkflowTemplate\nmetadata:\n  name: sample\n  namespace: argo\nspec:\n  entrypoint: other\n'
+            )
+        );
+        expect((next.object as typeof loaded).metadata.resourceVersion).toBe('12345');
+        expect((next.object as typeof loaded).metadata.uid).toBe('abc-123');
+    });
+
+    test('respects an explicit resourceVersion', () => {
+        const next = reducer(state, {type: 'setObject', payload: {object: {...loaded, metadata: {...loaded.metadata, resourceVersion: '999'}}}});
+        expect((next.object as typeof loaded).metadata.resourceVersion).toBe('999');
+    });
+});
+
 describe('reducer', () => {
     const testState = {
         object: {a: 1},

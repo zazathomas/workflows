@@ -25,6 +25,6 @@ spec:
         command: [sh, -c]
         args:
           - |
-            printf '%s\n' 'NEEDS_USER_ACTION:{"kind":"open-url","id":"rejected-1","title":"REJECTED: example.com is not in the allowlist","url":"https://example.com/login","code":"DEMO-5555"}'
-            printf '%s\n' 'NEEDS_USER_ACTION:{"kind":"open-url","id":"approved-1","title":"APPROVED: github.com is in the allowlist","url":"https://github.com/login/device","code":"DEMO-6666"}'
+            printf '%s\n' 'NEEDS_USER_ACTION:{"kind":"open-url","id":"rejected-1","title":"This host is not approved","url":"https://example.com/login","code":"DEMO-5555"}'
+            printf '%s\n' 'NEEDS_USER_ACTION:{"kind":"open-url","id":"approved-1","title":"This host is approved","url":"https://github.com/login/device","code":"DEMO-6666"}'
             sleep 60

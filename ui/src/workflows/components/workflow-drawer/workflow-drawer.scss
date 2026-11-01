@@ -123,3 +123,34 @@
     }
   }
 }
+
+.theme-dark .workflow-drawer {
+  background-color: #1f2937;
+  border-top-color: #334155;
+  color: #e5edf5;
+
+  .workflow-drawer__section {
+    border-top-color: #334155;
+  }
+
+  .workflow-drawer__title {
+    color: #a8b8ca;
+  }
+
+  .tag {
+    background-color: #334155;
+
+    .key {
+      color: #cbd5e1;
+    }
+
+    .value {
+      color: #ecfeff;
+      background-color: #0f766e;
+    }
+
+    &:hover .key {
+      color: #9fe8ef;
+    }
+  }
+}

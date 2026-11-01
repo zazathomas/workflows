@@ -144,6 +144,20 @@ test('a marked run action appears across pages and opens its link without leavin
     await expect(page.getByRole('dialog', {name: 'Sign in to continue'})).toBeVisible();
 });
 
+test('run details drawer follows the dark theme', async ({page}) => {
+    await mockApi(page);
+    await page.goto('/workflows/argo');
+    await page.getByRole('button', {name: 'Switch to dark mode'}).click();
+    await expect(page.locator('.modern-layout')).toHaveClass(/theme-dark/);
+
+    await page.getByRole('button', {name: 'Show details for sample-run'}).click();
+    const drawer = page.locator('.workflow-drawer');
+    await expect(drawer).toBeVisible();
+
+    const background = await drawer.evaluate(element => getComputedStyle(element).backgroundColor);
+    expect(background).toBe('rgb(31, 41, 55)');
+});
+
 test('shows the workflows name on a run page', async ({page}) => {
     await mockApi(page);
     await page.goto('/workflows/argo');

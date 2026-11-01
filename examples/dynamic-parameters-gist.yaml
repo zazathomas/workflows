@@ -23,6 +23,10 @@ metadata:
           "itemsPath": "sizes",
           "labelPath": "label",
           "valuePath": "value"
+        },
+        "test": {
+          "url": "https://gist.githubusercontent.com/zazathomas/cad6eaf36644a0aa36948b8fab8d1018/raw/options.json",
+          "itemsPath": "test"
         }
       }
 spec:
@@ -33,15 +37,15 @@ spec:
   arguments:
     parameters:
       - name: region
-        description: Where the run executes. The list comes from a public gist.
       - name: size
-        description: How much capacity to request. The list shares the same gist document.
+      - name: test
   templates:
     - name: show
       inputs:
         parameters:
           - name: region
           - name: size
+          - name: test
       container:
         image: docker.io/library/alpine:3.20
         command: [sh, -c]
@@ -49,3 +53,4 @@ spec:
           - |
             echo "region={{inputs.parameters.region}}"
             echo "size={{inputs.parameters.size}}"
+            echo "test={{inputs.parameters.test}}"

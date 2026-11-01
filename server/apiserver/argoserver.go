@@ -110,6 +110,7 @@ type argoServer struct {
 	allowedLinkProtocol      []string
 	cache                    *cache.ResourceCache
 	restConfig               *rest.Config
+	logger                   logging.Logger
 	maxGRPCMessageSize       int
 }
 
@@ -206,6 +207,7 @@ func NewArgoServer(ctx context.Context, opts ArgoServerOpts) (Server, error) {
 		allowedLinkProtocol:      opts.AllowedLinkProtocol,
 		cache:                    resourceCache,
 		restConfig:               opts.RestConfig,
+		logger:                   log,
 		maxGRPCMessageSize:       maxGRPCMessageSize,
 	}, nil
 }
@@ -547,7 +549,14 @@ func (as *argoServer) authenticateExtension(next http.Handler, requiresCallerRBA
 		for _, cookie := range r.Header.Values("Cookie") {
 			md.Append("cookie", cookie)
 		}
-		authenticatedContext, err := as.gatekeeper.ContextWithRequest(metadata.NewIncomingContext(r.Context(), md), types.NamespaceHolder(r.URL.Query().Get("namespace")))
+		// gRPC requests get a logger from the interceptors; HTTP extension
+		// routes are mounted outside them, and SSO and client auth both log.
+		logger := as.logger
+		if logger == nil {
+			logger = logging.NewSlogLogger(logging.Info, logging.Text)
+		}
+		ctx := logging.WithLogger(r.Context(), logger)
+		authenticatedContext, err := as.gatekeeper.ContextWithRequest(metadata.NewIncomingContext(ctx, md), types.NamespaceHolder(r.URL.Query().Get("namespace")))
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)

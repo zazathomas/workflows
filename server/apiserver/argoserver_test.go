@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -74,6 +75,41 @@ func TestParameterOptionsRejectServerAuth(t *testing.T) {
 
 	assert.Equal(t, http.StatusForbidden, recorder.Code)
 	assert.False(t, called)
+}
+
+// loggingGatekeeper mimics the SSO path, which reads the logger from the
+// request context. Missing one used to panic, and Envoy surfaced that to the
+// browser as "upstream connect error ... connection termination".
+type loggingGatekeeper struct {
+	auth.Gatekeeper
+}
+
+func (g loggingGatekeeper) ContextWithRequest(ctx context.Context, _ any) (context.Context, error) {
+	logging.RequireLoggerFromContext(ctx)
+	return ctx, nil
+}
+
+func TestExtensionHandlersProvideLoggerInContext(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		handler  func(*argoServer, http.Handler) http.Handler
+		expected int
+	}{
+		{name: "parameter options", handler: (*argoServer).authenticatedHandler, expected: http.StatusForbidden},
+		{name: "run action policy", handler: (*argoServer).authenticatedPolicyHandler, expected: http.StatusOK},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server := &argoServer{gatekeeper: loggingGatekeeper{}}
+			handler := tt.handler(server, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+			recorder := httptest.NewRecorder()
+
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/extensions/", nil))
+
+			assert.Equal(t, tt.expected, recorder.Code)
+		})
+	}
 }
 
 func TestNewArgoServerIgnoresLogoutRedirectOutsideSSO(t *testing.T) {

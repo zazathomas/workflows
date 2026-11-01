@@ -1,0 +1,91 @@
+# Run action: GitHub device-code login.
+#
+# Without a clientId the pod prints a demo prompt and exits, so you can see the
+# Run-action dialog without registering an OAuth App. With a clientId from an
+# OAuth App that has device flow enabled, it starts a real device flow, prints
+# the user code as a Run action, waits for approval, then prints the
+# authenticated login and discards the token.
+#
+# The marker annotation is copied onto the Run when you submit from the UI, so
+# the browser can watch the log. github.com must be in
+# ARGO_SERVER_RUN_ACTION_ALLOW_HOSTS, and the pod needs egress to github.com.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: device-login-run-action
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/description: |
+      Sign in to GitHub with a device code while the Run waits for you.
+    workflows-ui-action-marker: 'NEEDS_USER_ACTION:'
+    workflows-ui-action-container: main
+spec:
+  entrypoint: main
+  # The cluster artifact repository is unreachable from here, so skip log archiving.
+  archiveLogs: false
+  serviceAccountName: wf-runner
+  arguments:
+    parameters:
+      - name: clientId
+        value: ''
+      - name: scope
+        value: read:user
+  templates:
+    - name: main
+      inputs:
+        parameters:
+          - name: clientId
+          - name: scope
+      container:
+        image: docker.io/curlimages/curl:8.10.1
+        command: [sh, -c]
+        args:
+          - |
+            set -eu
+            client_id='{{inputs.parameters.clientId}}'
+            scope='{{inputs.parameters.scope}}'
+
+            json_field() {
+              printf '%s' "$1" | sed -n "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^\",}]*\)\"\{0,1\}.*/\1/p"
+            }
+
+            if [ -z "$client_id" ]; then
+              printf '%s\n' 'NEEDS_USER_ACTION:{"kind":"open-url","id":"device-login-demo","title":"GitHub device login (demo: no OAuth app client ID set)","url":"https://github.com/login/device","code":"DEMO-1234"}'
+              sleep 120
+              echo "no clientId parameter supplied, so no token exchange was attempted"
+              exit 0
+            fi
+
+            start=$(curl -sS -X POST https://github.com/login/device/code \
+              -H 'Accept: application/json' \
+              -d "client_id=${client_id}&scope=${scope}")
+            device_code=$(json_field "$start" device_code)
+            user_code=$(json_field "$start" user_code)
+            verification_uri=$(json_field "$start" verification_uri)
+            interval=$(json_field "$start" interval)
+            if [ -z "$device_code" ] || [ -z "$user_code" ]; then
+              echo "could not start the device flow: $start" >&2
+              exit 1
+            fi
+            interval=${interval:-5}
+
+            printf '%s\n' "NEEDS_USER_ACTION:{\"kind\":\"open-url\",\"id\":\"device-login-1\",\"title\":\"Sign in to GitHub\",\"url\":\"${verification_uri}\",\"code\":\"${user_code}\"}"
+
+            while :; do
+              poll=$(curl -sS -X POST https://github.com/login/oauth/access_token \
+                -H 'Accept: application/json' \
+                -d "client_id=${client_id}&device_code=${device_code}&grant_type=urn:ietf:params:oauth:grant-type:device_code")
+              token=$(json_field "$poll" access_token)
+              if [ -n "$token" ]; then break; fi
+              case "$(json_field "$poll" error)" in
+                authorization_pending) sleep "$interval" ;;
+                slow_down) interval=$((interval + 5)); sleep "$interval" ;;
+                *)
+                  echo "device flow ended: $poll" >&2
+                  exit 1
+                  ;;
+              esac
+            done
+
+            login=$(curl -sS -H "Authorization: Bearer ${token}" https://api.github.com/user | sed -n 's/.*"login"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+            echo "authenticated as ${login}; the token was used once and discarded"

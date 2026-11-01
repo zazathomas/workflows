@@ -1,0 +1,49 @@
+# Dynamic parameter options from a public GitHub gist.
+# The gist holds one JSON document with two arrays; each parameter reads a
+# different array through itemsPath. Gist raw URLs need gist.githubusercontent.com
+# in ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS on the server.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: dynamic-parameters-gist
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/description: |
+      Pick a region and a size; both lists come from a public GitHub gist.
+    workflows.argoproj.io/parameter-sources: |
+      {
+        "region": {
+          "url": "https://gist.githubusercontent.com/zazathomas/cad6eaf36644a0aa36948b8fab8d1018/raw/options.json",
+          "itemsPath": "regions",
+          "labelPath": "label",
+          "valuePath": "value"
+        },
+        "size": {
+          "url": "https://gist.githubusercontent.com/zazathomas/cad6eaf36644a0aa36948b8fab8d1018/raw/options.json",
+          "itemsPath": "sizes",
+          "labelPath": "label",
+          "valuePath": "value"
+        }
+      }
+spec:
+  entrypoint: show
+  # The cluster artifact repository is unreachable from here, so skip log archiving.
+  archiveLogs: false
+  serviceAccountName: wf-runner
+  arguments:
+    parameters:
+      - name: region
+      - name: size
+  templates:
+    - name: show
+      inputs:
+        parameters:
+          - name: region
+          - name: size
+      container:
+        image: docker.io/library/alpine:3.20
+        command: [sh, -c]
+        args:
+          - |
+            echo "region={{inputs.parameters.region}}"
+            echo "size={{inputs.parameters.size}}"

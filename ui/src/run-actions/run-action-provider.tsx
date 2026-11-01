@@ -137,11 +137,24 @@ export function RunActionProvider({subject, history, children}: {subject?: strin
     const contextValue = useMemo(() => ({track}), [track]);
     const warning = Object.values(monitorWarnings)[0] || policyWarning;
     const current = actions.find(action => actionKey(action) === openKey);
+    const dismiss = (action: PendingRunAction) => {
+        const key = actionKey(action);
+        setDismissed(previous => new Set(previous).add(key));
+        setOpenKey(currentKey => (currentKey === key ? null : currentKey));
+        indicatorRef.current?.focus();
+    };
+    // Cancelling drops the request instead of only hiding the dialog, so it no
+    // longer counts towards the indicator. The run stays monitored: a renewed
+    // code arrives with a new event id.
+    const cancel = (action: PendingRunAction) => {
+        const key = actionKey(action);
+        setActions(previous => previous.filter(existing => actionKey(existing) !== key));
+        setOpenKey(currentKey => (currentKey === key ? null : currentKey));
+        indicatorRef.current?.focus();
+    };
     const close = () => {
         if (!current) return;
-        setDismissed(previous => new Set(previous).add(actionKey(current)));
-        setOpenKey(null);
-        indicatorRef.current?.focus();
+        dismiss(current);
     };
     const viewRun = () => {
         if (!current) return;
@@ -164,15 +177,27 @@ export function RunActionProvider({subject, history, children}: {subject?: strin
                 <aside className='run-action-indicator' aria-label='Run actions' role='status'>
                     {actions.length > 0 && (
                         <>
-                            <button ref={indicatorRef} type='button' onClick={() => setOpenKey(actionKey(actions[0]))}>
-                                Action required ({actions.length})
-                            </button>
+                            <div className='run-action-indicator__header'>
+                                <button ref={indicatorRef} type='button' onClick={() => setOpenKey(actionKey(actions[0]))}>
+                                    Action required ({actions.length})
+                                </button>
+                                <button type='button' className='run-action-indicator__cancel' onClick={() => cancel(actions[0])}>
+                                    Cancel{actions.length > 1 ? ' first' : ''}
+                                </button>
+                            </div>
                             {actions.length > 1 && (
                                 <ul>
                                     {actions.map(action => (
                                         <li key={actionKey(action)}>
                                             <button type='button' onClick={() => setOpenKey(actionKey(action))}>
                                                 {action.event.title} ({action.run.name})
+                                            </button>
+                                            <button
+                                                type='button'
+                                                className='run-action-indicator__cancel'
+                                                aria-label={`Cancel request for ${action.run.name}`}
+                                                onClick={() => cancel(action)}>
+                                                Cancel
                                             </button>
                                         </li>
                                     ))}

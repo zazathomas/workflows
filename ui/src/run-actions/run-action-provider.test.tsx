@@ -65,6 +65,36 @@ test('shows sequential requests anywhere in the UI and returns to this run on li
     expect(screen.queryByRole('button', {name: 'Action required (2)'})).not.toBeInTheDocument();
 });
 
+test('the action indicator can cancel a request without opening it', async () => {
+    const logs = new Subject<any>();
+    jest.spyOn(services.runActions, 'allowedHosts').mockResolvedValue(['github.com']);
+    jest.spyOn(services.workflows, 'get').mockResolvedValue(workflow);
+    jest.spyOn(services.workflows, 'watch').mockReturnValue(new Subject<any>());
+    jest.spyOn(services.workflows, 'watchRunActionLogs').mockReturnValue(logs);
+    const history = createMemoryHistory();
+    render(
+        <RunActionProvider subject='alice' history={history}>
+            <TrackButton />
+        </RunActionProvider>
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Run job'}));
+    await waitFor(() => expect(logs.observers).toHaveLength(1));
+    act(() => {
+        logs.next({content: marker + JSON.stringify({kind: 'open-url', id: 'only', title: 'Sign in', url: 'https://github.com/login/device'}), podName: 'job-run-1'});
+    });
+    expect(await screen.findByRole('dialog', {name: 'Sign in'})).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', {name: /Action required/})).not.toBeInTheDocument();
+    // A new event for the same run still prompts, so cancelling one request does not stop monitoring.
+    act(() => {
+        logs.next({content: marker + JSON.stringify({kind: 'open-url', id: 'renewed', title: 'Sign in again', url: 'https://github.com/login/device'}), podName: 'job-run-1'});
+    });
+    expect(await screen.findByRole('dialog', {name: 'Sign in again'})).toBeInTheDocument();
+});
+
 test('does not connect to pod logs without administrator-approved hosts', async () => {
     jest.spyOn(services.runActions, 'allowedHosts').mockResolvedValue([]);
     jest.spyOn(services.workflows, 'get').mockResolvedValue(workflow);

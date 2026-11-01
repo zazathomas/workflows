@@ -105,6 +105,47 @@ test('Run logs default to hiding internals and remember the verbose toggle', asy
     await expect(page.getByRole('textbox', {name: 'Terminal input'})).toBeVisible();
 });
 
+test('run action dialog and indicator follow the theme and the indicator can cancel', async ({page}) => {
+    await mockApi(page);
+    const markedTemplate = {...template, metadata: {...template.metadata, annotations: {...template.metadata.annotations, 'workflows-ui-action-marker': 'NEEDS_USER_ACTION:'}}};
+    await page.route('**/api/v1/userinfo', route => route.fulfill({contentType: 'application/json', body: '{}'}));
+    await page.route('**/api/v1/extensions/run-action-policy', route => route.fulfill({contentType: 'application/json', body: JSON.stringify({allowedHosts: ['github.com']})}));
+    await page.route(/\/api\/v1\/workflow-templates\/argo(?:\?.*)?$/, route => route.fulfill({contentType: 'application/json', body: JSON.stringify({items: [markedTemplate]})}));
+    await page.route('**/api/v1/workflows/argo/sample-run', route =>
+        route.fulfill({contentType: 'application/json', body: JSON.stringify({...workflow, status: {...workflow.status, phase: 'Running', finishedAt: undefined}})})
+    );
+    await page.route('**/api/v1/workflows/argo/submit', route =>
+        route.fulfill({contentType: 'application/json', body: JSON.stringify({...workflow, status: {...workflow.status, phase: 'Running', finishedAt: undefined}})})
+    );
+    await page.route('**/api/v1/workflows/argo/sample-run/log?*', route =>
+        route.fulfill({
+            contentType: 'text/event-stream',
+            body: `data: ${JSON.stringify({
+                result: {
+                    content: 'NEEDS_USER_ACTION:{"kind":"open-url","id":"theme-1","title":"Sign in","url":"https://github.com/login/device","code":"ABCD-1234"}',
+                    podName: 'sample-run-1'
+                }
+            })}\n\n`
+        })
+    );
+
+    // Switch theme first: the submit panel hides the rest of the app from assistive technology.
+    await page.goto('/workflows/argo');
+    await page.getByRole('button', {name: 'Switch to dark mode'}).click();
+    await page.goto('/workflows/argo?sidePanel=submit-new-workflow&template=sample-job');
+    await page.getByRole('button', {name: 'Run job', exact: true}).last().click();
+
+    const dialog = page.getByRole('dialog', {name: 'Sign in'});
+    await expect(dialog).toBeVisible();
+    const background = await dialog.evaluate(element => getComputedStyle(element).backgroundColor);
+    expect(background).toBe('rgb(31, 41, 55)');
+
+    await page.getByRole('button', {name: 'Close run action'}).click();
+    await expect(page.getByRole('button', {name: 'Action required (1)'})).toBeVisible();
+    await page.getByRole('button', {name: 'Cancel'}).click();
+    await expect(page.getByRole('button', {name: 'Action required (1)'})).toHaveCount(0);
+});
+
 test('a marked run action appears across pages and opens its link without leaving the run overview', async ({page}) => {
     await mockApi(page);
     const markedTemplate = {...template, metadata: {...template.metadata, annotations: {...template.metadata.annotations, 'workflows-ui-action-marker': 'NEEDS_USER_ACTION:'}}};

@@ -15,6 +15,7 @@ Enable GitHub Actions to write the GHCR package and enable private vulnerability
 Tag a release with the upstream version it targets, such as `4.1.6`.
 The workflow rejects anything that is not `x.y.z` or `x.y.z.fix`, so a branch name or scratch tag cannot publish by accident.
 The tag becomes the image tag and the reported version: `ghcr.io/zazathomas/workflows:4.1.6` reports `argo: 4.1.6`.
+The image is published as a multi-platform index for `linux/amd64` and `linux/arm64`, and the workflow fails if either platform is missing; cluster conformance runs on `linux/amd64` only.
 One image serves every release in the compatibility matrix, so the tag names the newest upstream release it was tested against, not the only one it supports.
 For a fork-only fix on an already released upstream version, publish a fourth component such as `4.1.6.1`.
 State the tested upstream range in the release notes, and pin the image digest when deploying; the tag only records which release produced the image.

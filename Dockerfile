@@ -5,7 +5,9 @@ ARG GIT_TAG=unknown
 ARG GIT_TREE_STATE=unknown
 ARG BUILD_DATE=unknown
 
-FROM golang:1.27.3-alpine3.23@sha256:8a5046497cda39860b832ffdbe8dd66018a0f05bb01352f533a36e7e2ced66a0 AS builder
+# Build Kit is required for multi-arch: the Go toolchain and Node run on the
+# build platform and cross-compile, so no emulation is needed per architecture.
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.23@sha256:8a5046497cda39860b832ffdbe8dd66018a0f05bb01352f533a36e7e2ced66a0 AS builder
 
 RUN apk add --no-cache git make ca-certificates bash
 
@@ -18,7 +20,7 @@ COPY . .
 
 ####################################################################################################
 
-FROM node:24-alpine3.23@sha256:9b69af715c7f9d038150b54ccccbaeffa9064bbc93e2904c29591ca097316af1 AS argo-ui
+FROM --platform=$BUILDPLATFORM node:24-alpine3.23@sha256:9b69af715c7f9d038150b54ccccbaeffa9064bbc93e2904c29591ca097316af1 AS argo-ui
 
 RUN apk add --no-cache git
 
@@ -48,6 +50,8 @@ ARG GIT_COMMIT
 ARG GIT_TAG
 ARG GIT_TREE_STATE
 ARG BUILD_DATE
+ARG TARGETOS
+ARG TARGETARCH
 
 RUN mkdir -p ui/dist
 COPY --from=argo-ui ui/dist/app ui/dist/app
@@ -55,7 +59,8 @@ COPY --from=argo-ui ui/dist/app ui/dist/app
 RUN touch ui/dist/app/index.html
 
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 make dist/argo VERSION="$VERSION" BUILD_DATE="$BUILD_DATE" GIT_COMMIT="$GIT_COMMIT" GIT_TAG="$GIT_TAG" GIT_TREE_STATE="$GIT_TREE_STATE"
+    CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" \
+    make dist/argo VERSION="$VERSION" BUILD_DATE="$BUILD_DATE" GIT_COMMIT="$GIT_COMMIT" GIT_TAG="$GIT_TAG" GIT_TREE_STATE="$GIT_TREE_STATE"
 
 ####################################################################################################
 

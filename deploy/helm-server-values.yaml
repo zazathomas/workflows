@@ -2,4 +2,4 @@ server:
   image:
     registry: ghcr.io
     repository: zazathomas/workflows
-    tag: '4.1.6@sha256:REPLACE_WITH_RELEASE_DIGEST'
+    tag: '4.1.6@sha256:e82c7a58710614cc574014947ffd2447a7866956a05376fcb7c551c6a5af3609'

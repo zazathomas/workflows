@@ -52,7 +52,7 @@ def main():
     if args.download:
         print(f"Downloading {url}", file=sys.stderr)
         try:
-            with urllib.request.urlopen(url) as response:
+            with urllib.request.urlopen(url, timeout=60) as response:
                 data = response.read()
         except OSError as err:
             sys.exit(f"Cannot download {url}: {err}")

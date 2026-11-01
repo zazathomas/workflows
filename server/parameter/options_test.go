@@ -9,8 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	wfv1 "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
-	wffake "github.com/argoproj/argo-workflows/v4/pkg/client/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -20,8 +18,34 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
+	wfv1 "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
+	wffake "github.com/argoproj/argo-workflows/v4/pkg/client/clientset/versioned/fake"
 	"github.com/argoproj/argo-workflows/v4/server/auth"
 )
+
+func TestParseHostsRejectsEntriesThatCannotMatch(t *testing.T) {
+	hosts, err := ParseHosts(" Gist.GitHubUserContent.com , example.org,EXAMPLE.org ")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"example.org", "gist.githubusercontent.com"}, hosts)
+
+	for _, value := range []string{"https://example.com", "*.example.com", "example.com:443", "127.0.0.1", "example", "user@example.com", "example.org,"} {
+		_, err := ParseHosts(value)
+		assert.Error(t, err, value)
+	}
+}
+
+func TestMapOptionsLimitsSize(t *testing.T) {
+	tooMany := make([]any, maxOptions+1)
+	for i := range tooMany {
+		tooMany[i] = "value"
+	}
+	_, err := mapOptions(tooMany, "", "", "")
+	require.ErrorContains(t, err, "limit is")
+
+	long := strings.Repeat("a", maxOptionTextSize+1)
+	_, err = mapOptions([]any{long}, "", "", "")
+	require.ErrorContains(t, err, "at most")
+}
 
 func TestMapOptions(t *testing.T) {
 	document := map[string]any{
@@ -53,7 +77,7 @@ func TestSecretHeaderUsesAuthenticatedKubernetesClient(t *testing.T) {
 		Data:       map[string][]byte{"token": []byte("user-token")},
 	})
 	handler := NewOptionsHandler(OptionsHandlerConfig{})
-	request, err := http.NewRequest(http.MethodGet, "https://catalog.example.com?secretName=catalog&secretNamespace=argo&secretKey=token&header=Authorization", nil)
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://catalog.example.com?secretName=catalog&secretNamespace=argo&secretKey=token&header=Authorization", nil)
 	require.NoError(t, err)
 	request = request.WithContext(context.WithValue(request.Context(), auth.KubeKey, userClient))
 
@@ -63,7 +87,7 @@ func TestSecretHeaderUsesAuthenticatedKubernetesClient(t *testing.T) {
 
 func TestSecretHeaderRequiresAuthenticatedClient(t *testing.T) {
 	handler := NewOptionsHandler(OptionsHandlerConfig{})
-	request := httptest.NewRequest(http.MethodGet, "/?secretName=catalog&secretNamespace=argo&secretKey=token&header=Authorization", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/?secretName=catalog&secretNamespace=argo&secretKey=token&header=Authorization", nil)
 	err := handler.addSecretHeader(request, request)
 	require.ErrorContains(t, err, "authenticated Kubernetes client")
 	assert.Empty(t, request.Header.Get("Authorization"))
@@ -75,7 +99,7 @@ func TestSecretHeaderReturnsAuthenticatedClientRBACError(t *testing.T) {
 		return true, nil, apierrors.NewForbidden(corev1.Resource("secrets"), "catalog", nil)
 	})
 	handler := NewOptionsHandler(OptionsHandlerConfig{})
-	request, err := http.NewRequest(http.MethodGet, "https://catalog.example.com?secretName=catalog&secretNamespace=argo&secretKey=token&header=Authorization", nil)
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://catalog.example.com?secretName=catalog&secretNamespace=argo&secretKey=token&header=Authorization", nil)
 	require.NoError(t, err)
 	request = request.WithContext(context.WithValue(request.Context(), auth.KubeKey, userClient))
 
@@ -90,7 +114,7 @@ func TestConfigMapOptionsUseAuthenticatedClient(t *testing.T) {
 		Data:       map[string]string{"environments": `{"items":[{"name":"Staging","id":"staging"},{"name":"Production","id":"production"}]}`},
 	})
 	handler := NewOptionsHandler(OptionsHandlerConfig{})
-	request := httptest.NewRequest(http.MethodGet, "/?configMapName=catalog&configMapKey=environments&namespace=argo&itemsPath=items&labelPath=name&valuePath=id", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/?configMapName=catalog&configMapKey=environments&namespace=argo&itemsPath=items&labelPath=name&valuePath=id", nil)
 	request = request.WithContext(context.WithValue(request.Context(), auth.KubeKey, userClient))
 	recorder := httptest.NewRecorder()
 
@@ -106,7 +130,7 @@ func TestConfigMapOptionsReadFromExplicitNamespace(t *testing.T) {
 		Data:       map[string]string{"regions": `["eu-west-1"]`},
 	})
 	handler := NewOptionsHandler(OptionsHandlerConfig{})
-	request := httptest.NewRequest(http.MethodGet, "/?configMapName=catalog&configMapKey=regions&configMapNamespace=shared&namespace=argo", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/?configMapName=catalog&configMapKey=regions&configMapNamespace=shared&namespace=argo", nil)
 	request = request.WithContext(context.WithValue(request.Context(), auth.KubeKey, userClient))
 	recorder := httptest.NewRecorder()
 
@@ -136,7 +160,7 @@ func TestConfigMapOptionsFailClosed(t *testing.T) {
 				client = fake.NewSimpleClientset()
 			}
 			handler := NewOptionsHandler(OptionsHandlerConfig{})
-			request := httptest.NewRequest(http.MethodGet, "/?"+tt.query, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/?"+tt.query, nil)
 			request = request.WithContext(context.WithValue(request.Context(), auth.KubeKey, client))
 			recorder := httptest.NewRecorder()
 			if tt.name == "both sources" || tt.name == "neither source" {
@@ -174,7 +198,7 @@ func TestParameterSourceRequiresReadableTemplateAndExactAnnotation(t *testing.T)
 		{"different parameter", "/?configMapName=catalog&configMapKey=regions&namespace=argo&templateKind=WorkflowTemplate&templateName=job&parameterName=other", http.StatusForbidden},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, tt.query, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.query, nil)
 			request = request.WithContext(context.WithValue(context.WithValue(request.Context(), auth.WfKey, workflowClient), auth.KubeKey, kube))
 			recorder := httptest.NewRecorder()
 			handler.ServeHTTP(recorder, request)
@@ -199,7 +223,7 @@ func TestURLSourceCannotChangeTargetOrSecretNamespace(t *testing.T) {
 		{"tampered parameter", strings.Replace(base, "my-team", "other-team", 1)},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, tt.query, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.query, nil)
 			request = request.WithContext(context.WithValue(request.Context(), auth.WfKey, workflowClient))
 			require.Error(t, handler.authorizeSource(request))
 		})
@@ -236,7 +260,7 @@ func TestOptionsHandlerFetchesDeclaredURLOnly(t *testing.T) {
 				assert.Equal(t, "/my-team", request.URL.Path)
 				return &http.Response{StatusCode: tt.upstreamStatus, Body: io.NopCloser(strings.NewReader(tt.body)), Header: http.Header{}}, nil
 			})
-			request := httptest.NewRequest(http.MethodGet, base, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, base, nil)
 			request = request.WithContext(context.WithValue(request.Context(), auth.WfKey, workflowClient))
 			recorder := httptest.NewRecorder()
 			handler.ServeHTTP(recorder, request)

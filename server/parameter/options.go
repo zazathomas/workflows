@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,12 +21,44 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/argoproj/argo-workflows/v4/server/auth"
+	"github.com/argoproj/argo-workflows/v4/util/logging"
 )
 
 const (
-	maxResponseSize = 2 << 20
-	requestTimeout  = 10 * time.Second
+	maxResponseSize   = 2 << 20
+	maxOptions        = 1000
+	maxOptionTextSize = 512
+	requestTimeout    = 10 * time.Second
 )
+
+var dnsLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// ParseHosts validates ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS. Entries that look
+// like a URL, wildcard, or IP never match a request, so reject them at startup
+// instead of silently ignoring them.
+func ParseHosts(value string) ([]string, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+	hosts := map[string]struct{}{}
+	for raw := range strings.SplitSeq(value, ",") {
+		host := strings.ToLower(strings.TrimSpace(raw))
+		valid := len(host) <= 253 && strings.Contains(host, ".") && net.ParseIP(host) == nil
+		for label := range strings.SplitSeq(host, ".") {
+			valid = valid && dnsLabel.MatchString(label)
+		}
+		if !valid {
+			return nil, fmt.Errorf("invalid parameter source hostname %q: use exact DNS hostnames without scheme, port, or wildcard", raw)
+		}
+		hosts[host] = struct{}{}
+	}
+	result := make([]string, 0, len(hosts))
+	for host := range hosts {
+		result = append(result, host)
+	}
+	sort.Strings(result)
+	return result, nil
+}
 
 // OptionsHandler fetches allowlisted JSON sources and maps them to selectable options.
 type OptionsHandler struct {
@@ -106,7 +140,7 @@ func (h *OptionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid url")
 		return
 	}
-	if err := validateURL(parsedURL, h.allowedHosts); err != nil {
+	if err = validateURL(parsedURL, h.allowedHosts); err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -116,14 +150,15 @@ func (h *OptionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid url")
 		return
 	}
-	if err := h.addSecretHeader(request, r); err != nil {
+	if err = h.addSecretHeader(request, r); err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
 	response, err := h.client.Do(request)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch parameter options: %v", err))
+		logging.RequireLoggerFromContext(r.Context()).WithError(err).Error(r.Context(), "failed to fetch parameter options")
+		writeError(w, http.StatusBadGateway, "failed to fetch parameter options")
 		return
 	}
 	defer response.Body.Close()
@@ -238,12 +273,18 @@ func mapOptions(document any, itemsPath, labelPath, valuePath string) ([]Option,
 	if !ok {
 		return nil, errors.New("itemsPath must resolve to an array")
 	}
+	if len(array) > maxOptions {
+		return nil, fmt.Errorf("parameter source returned %d options; the limit is %d", len(array), maxOptions)
+	}
 	options := make([]Option, 0, len(array))
 	for _, item := range array {
 		if labelPath == "" && valuePath == "" {
 			value, ok := item.(string)
 			if !ok {
 				return nil, errors.New("labelPath and valuePath are required for object items")
+			}
+			if len(value) > maxOptionTextSize {
+				return nil, fmt.Errorf("parameter option text must be at most %d characters", maxOptionTextSize)
 			}
 			options = append(options, Option{Label: value, Value: value})
 			continue
@@ -255,6 +296,9 @@ func mapOptions(document any, itemsPath, labelPath, valuePath string) ([]Option,
 		value, err := optionValue(item, valuePath)
 		if err != nil {
 			return nil, fmt.Errorf("invalid valuePath: %w", err)
+		}
+		if len(label) > maxOptionTextSize || len(value) > maxOptionTextSize {
+			return nil, fmt.Errorf("parameter option text must be at most %d characters", maxOptionTextSize)
 		}
 		options = append(options, Option{Label: label, Value: value})
 	}

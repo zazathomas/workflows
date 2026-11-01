@@ -108,6 +108,12 @@ Requests identify a readable WorkflowTemplate or ClusterWorkflowTemplate, its pa
 The endpoint uses GET requests, so interpolated parameter values may appear in proxy logs and browser history.
 Do not put credentials or other sensitive values in interpolated parameters.
 
+## Limits
+
+The server fetches with a 10 second timeout and reads at most 2 MiB.
+A source may return at most 1000 options, and each label or value may be at most 512 characters; larger responses are reported as an error instead of being truncated.
+Malformed entries in `ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS` stop the server at startup rather than being ignored, so a typo cannot silently disable a source.
+
 ## Secret headers
 
 A source can read a header value from a Kubernetes Secret in the submitting namespace:

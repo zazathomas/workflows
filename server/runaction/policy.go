@@ -19,10 +19,10 @@ func ParseHosts(value string) ([]string, error) {
 		return nil, nil
 	}
 	hosts := map[string]struct{}{}
-	for _, raw := range strings.Split(value, ",") {
+	for raw := range strings.SplitSeq(value, ",") {
 		host := strings.ToLower(strings.TrimSpace(raw))
 		valid := len(host) <= 253 && strings.Contains(host, ".") && net.ParseIP(host) == nil
-		for _, label := range strings.Split(host, ".") {
+		for label := range strings.SplitSeq(host, ".") {
 			valid = valid && dnsLabel.MatchString(label)
 		}
 		if !valid {

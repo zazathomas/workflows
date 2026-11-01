@@ -4,7 +4,7 @@ workflows adds these server runtime variables:
 
 | Variable | Purpose |
 | --- | --- |
-| `ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS` | Comma-separated HTTPS hostnames allowed for dynamic parameter sources. Empty by default, which disables URL sources. The server rejects other hostnames and nonstandard HTTPS ports. |
+| `ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS` | Comma-separated HTTPS hostnames allowed for dynamic parameter sources. Empty by default, which disables URL sources. The server rejects other hostnames and nonstandard HTTPS ports, and refuses to start when an entry is malformed (scheme, port, wildcard, or trailing comma). |
 | `ARGO_SERVER_RUN_ACTION_ALLOW_HOSTS` | Comma-separated exact DNS hostnames that users may open from run actions. Empty by default, so no run-action links are offered. The server rejects malformed names at startup. This policy does not grant server network egress. |
 
 Set both variables on the `argo-server` Deployment, not the upstream controller configuration ConfigMap; the controller rejects unknown configuration fields in every [supported release](compatibility.md).

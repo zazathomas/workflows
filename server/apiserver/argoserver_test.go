@@ -32,7 +32,7 @@ func TestAuthenticatedHandlerRejectsMissingCredentials(t *testing.T) {
 	}))
 
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/extensions/parameter-options", nil))
+	handler.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/extensions/parameter-options", nil))
 
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 	assert.False(t, called)
@@ -46,7 +46,7 @@ func TestActionPolicyRequiresAuthAndSupportsServerMode(t *testing.T) {
 		called = true
 	}))
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/extensions/run-action-policy", nil))
+	handler.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/extensions/run-action-policy", nil))
 	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 	assert.False(t, called)
 
@@ -56,7 +56,7 @@ func TestActionPolicyRequiresAuthAndSupportsServerMode(t *testing.T) {
 		called = true
 	}))
 	recorder = httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/extensions/run-action-policy", nil))
+	handler.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/extensions/run-action-policy", nil))
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.True(t, called)
 }
@@ -71,7 +71,7 @@ func TestParameterOptionsRejectServerAuth(t *testing.T) {
 		called = true
 	}))
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/extensions/parameter-options", nil))
+	handler.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/extensions/parameter-options", nil))
 
 	assert.Equal(t, http.StatusForbidden, recorder.Code)
 	assert.False(t, called)
@@ -105,7 +105,7 @@ func TestExtensionHandlersProvideLoggerInContext(t *testing.T) {
 			}))
 			recorder := httptest.NewRecorder()
 
-			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/extensions/", nil))
+			handler.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/extensions/", nil))
 
 			assert.Equal(t, tt.expected, recorder.Code)
 		})

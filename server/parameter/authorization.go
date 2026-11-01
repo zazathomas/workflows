@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -68,13 +69,7 @@ func (h *OptionsHandler) authorizeSource(r *http.Request) error {
 	default:
 		return errors.New("invalid templateKind")
 	}
-	found := false
-	for _, p := range parameters {
-		if p == parameter {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(parameters, parameter)
 	if !found {
 		return errors.New("parameter is not declared by the template")
 	}
@@ -100,8 +95,8 @@ func (h *OptionsHandler) authorizeSource(r *http.Request) error {
 		}
 		expectedURL := placeholder.ReplaceAllStringFunc(source.URL, func(match string) string {
 			name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "{{"), "}}"))
-			if strings.HasPrefix(match, "${") {
-				name = strings.TrimSuffix(strings.TrimPrefix(match, "${"), "}")
+			if after, ok := strings.CutPrefix(match, "${"); ok {
+				name = strings.TrimSuffix(after, "}")
 			}
 			return strings.ReplaceAll(url.QueryEscape(values[name]), "+", "%20")
 		})

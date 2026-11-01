@@ -29,13 +29,13 @@ func TestParseHosts(t *testing.T) {
 func TestPolicyHandler(t *testing.T) {
 	handler := NewPolicyHandler([]string{"github.com"})
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/extensions/run-action-policy", nil))
+	handler.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/extensions/run-action-policy", nil))
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.JSONEq(t, `{"allowedHosts":["github.com"]}`, recorder.Body.String())
 	assert.Equal(t, "no-store", recorder.Header().Get("Cache-Control"))
 
 	recorder = httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/api/v1/extensions/run-action-policy", nil))
+	handler.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/extensions/run-action-policy", nil))
 	assert.Equal(t, http.StatusMethodNotAllowed, recorder.Code)
 	assert.Equal(t, "GET", recorder.Header().Get("Allow"))
 }

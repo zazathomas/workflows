@@ -312,7 +312,11 @@ func (as *argoServer) Run(ctx context.Context, port int, browserOpenFunc func(st
 	grpcServer := as.newGRPCServer(ctx, instanceIDService, workflowServer, wftmplStore, cwftmplInformer, wfArchiveServer, syncServer, eventServer, config.Links, config.Columns, config.NavColor, config.WorkflowDefaults)
 	// Keep fork-only egress policy out of the shared controller ConfigMap: upstream
 	// controllers reject unknown fields when they load it.
-	allowedHosts := strings.Split(env.GetString("ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS", ""), ",")
+	allowedHosts, err := parameter.ParseHosts(env.GetString("ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS", ""))
+	if err != nil {
+		log.WithError(err).Error(ctx, "Invalid parameter source host policy")
+		os.Exit(1)
+	}
 	actionHosts, err := runaction.ParseHosts(env.GetString("ARGO_SERVER_RUN_ACTION_ALLOW_HOSTS", ""))
 	if err != nil {
 		log.WithError(err).Error(ctx, "Invalid run action host policy")

@@ -24,6 +24,7 @@ interface ActiveRun {
     logs?: Subscription;
     timer?: ReturnType<typeof setTimeout>;
     retries: number;
+    failures: number;
     reportedError: boolean;
 }
 
@@ -170,7 +171,7 @@ export class RunActionMonitor {
         for (const run of this.tracked.values()) {
             if (this.active.size >= MAX_ACTIVE) break;
             if (this.active.has(run.uid)) continue;
-            const entry: ActiveRun = {run, retries: 0, reportedError: false};
+            const entry: ActiveRun = {run, retries: 0, failures: 0, reportedError: false};
             this.active.set(run.uid, entry);
             this.load(entry);
         }
@@ -218,6 +219,16 @@ export class RunActionMonitor {
         entry.logs?.unsubscribe();
         entry.logs = services.workflows.watchRunActionLogs(run.namespace, run.name, run.marker, run.container).subscribe({
             next: log => {
+                if (!log) {
+                    // The stream is open, so any earlier warning was transient.
+                    entry.failures = 0;
+                    if (entry.reportedError) {
+                        entry.reportedError = false;
+                        this.onError(run.uid, '');
+                    }
+                    return;
+                }
+                entry.failures = 0;
                 const event = parseRunActionLine(log.content, run.marker, this.allowedHosts);
                 if (!event) {
                     this.report(entry, 'A marked log line was ignored (invalid, expired, or unapproved link). Check the Job and approved hosts.');
@@ -239,7 +250,12 @@ export class RunActionMonitor {
                 this.onAction({run, event});
             },
             error: () => {
-                this.report(entry, 'Unable to read run-action logs. Check pod-log access or open Logs on the run.');
+                entry.failures++;
+                // A new pod has no logs for a few seconds; only warn once retries
+                // have also failed, so submitting does not look like a permission error.
+                if (entry.failures >= 3) {
+                    this.report(entry, 'Waiting for the run’s logs. Check pod-log access or open Logs on the run if this persists.');
+                }
                 this.retry(entry, () => this.openLogs(entry));
             },
             complete: () => {

@@ -109,6 +109,39 @@ test('limits concurrent streams and starts a queued run when a slot opens', asyn
     monitor.stop();
 });
 
+test('warns only after repeated log failures and clears it when the stream opens', async () => {
+    jest.useFakeTimers();
+    try {
+        const streams = [new Subject<any>(), new Subject<any>(), new Subject<any>(), new Subject<any>()];
+        jest.spyOn(services.workflows, 'get').mockResolvedValue(run('flaky'));
+        jest.spyOn(services.workflows, 'watch').mockReturnValue(new Subject<any>());
+        let call = 0;
+        jest.spyOn(services.workflows, 'watchRunActionLogs').mockImplementation(() => streams[call++]);
+        const onError = jest.fn();
+        const monitor = new RunActionMonitor('alice', jest.fn(), jest.fn(), onError, jest.fn());
+        monitor.start();
+        monitor.setPolicy(['github.com']);
+        monitor.track(run('flaky'));
+        await Promise.resolve();
+
+        streams[0].error(new Error('no pod'));
+        jest.advanceTimersByTime(1000);
+        streams[1].error(new Error('no pod'));
+        expect(onError).not.toHaveBeenCalledWith('flaky', expect.stringContaining('pod-log access'));
+
+        jest.advanceTimersByTime(2000);
+        streams[2].error(new Error('no pod'));
+        expect(onError).toHaveBeenCalledWith('flaky', expect.stringContaining('Waiting for the run’s logs'));
+
+        jest.advanceTimersByTime(4000);
+        streams[3].next(null);
+        expect(onError).toHaveBeenLastCalledWith('flaky', '');
+        monitor.stop();
+    } finally {
+        jest.useRealTimers();
+    }
+});
+
 test('stops streaming when administrator approval is revoked and rechecks logs if restored', async () => {
     const logs = new Subject<any>();
     jest.spyOn(services.workflows, 'get').mockResolvedValue(run('policy'));
@@ -131,7 +164,7 @@ test('stops streaming when administrator approval is revoked and rechecks logs i
     monitor.stop();
 });
 
-test('retries a failed log stream while the workflow is active and reports lost access', async () => {
+test('retries a failed log stream while the workflow is active', async () => {
     jest.useFakeTimers();
     try {
         const first = new Subject<any>();
@@ -147,7 +180,8 @@ test('retries a failed log stream while the workflow is active and reports lost 
         monitor.track(run('retry'));
         await Promise.resolve();
         first.error(new Error('pod logs forbidden'));
-        expect(onError).toHaveBeenCalledWith('retry', expect.stringContaining('pod-log access'));
+        // One failure is normal while the pod starts; no warning yet.
+        expect(onError).not.toHaveBeenCalledWith('retry', expect.stringContaining('pod-log access'));
         jest.advanceTimersByTime(1000);
         expect(logs).toHaveBeenCalledTimes(2);
         second.next({content: marker + JSON.stringify(event('renewed')), podName: 'job-retry-1'});

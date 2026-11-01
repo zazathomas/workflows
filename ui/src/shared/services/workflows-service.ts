@@ -200,7 +200,9 @@ export const WorkflowsService = {
             .then(res => res.body as Workflow);
     },
 
-    watchRunActionLogs(namespace: string, name: string, marker: string, container: string): Observable<LogEntry> {
+    // Emits null when the stream opens, so callers can tell a transient failure
+    // apart from a run that simply has not printed a marker yet.
+    watchRunActionLogs(namespace: string, name: string, marker: string, container: string): Observable<LogEntry | null> {
         const grep = '^' + marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const params = new URLSearchParams({
             'logOptions.container': container,
@@ -208,9 +210,8 @@ export const WorkflowsService = {
             grep
         });
         return requests.loadEventSource(uiUrl(`api/v1/workflows/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/log?${params}`)).pipe(
-            filter(Boolean),
-            map(line => JSON.parse(line).result as LogEntry),
-            filter(entry => isString(entry?.content))
+            map(line => (line ? (JSON.parse(line).result as LogEntry) : null)),
+            filter(entry => entry === null || isString(entry?.content))
         );
     },
 

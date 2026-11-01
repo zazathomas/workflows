@@ -33,7 +33,9 @@ spec:
   arguments:
     parameters:
       - name: region
+        description: Where the run executes. The list comes from a public gist.
       - name: size
+        description: How much capacity to request. The list shares the same gist document.
   templates:
     - name: show
       inputs:

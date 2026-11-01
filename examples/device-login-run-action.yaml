@@ -28,8 +28,10 @@ spec:
     parameters:
       - name: clientId
         value: ''
+        description: Client ID of an OAuth App with device flow enabled. Leave empty to see the demo prompt only.
       - name: scope
         value: read:user
+        description: OAuth scope requested for the device login.
   templates:
     - name: main
       inputs:

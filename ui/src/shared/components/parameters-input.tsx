@@ -2,6 +2,7 @@ import React from 'react';
 
 import {Parameter} from '../models';
 import {Select} from './accessible-select';
+import {ParameterDescription} from './parameter-description';
 
 import './dynamic-parameters-input.scss';
 
@@ -40,15 +41,13 @@ export function ParametersInput(props: ParametersInputProps) {
                 const value = getValueFromParameter(parameter);
                 return (
                     <div key={parameter.name + '_' + index} style={{marginBottom: 14}}>
-                        <label htmlFor={inputId}>
-                            {parameter.name}
-                            {required && <span> (required)</span>}
-                        </label>
-                        {parameter.description && (
-                            <small id={descriptionId} className='parameter-description'>
-                                {parameter.description}
-                            </small>
-                        )}
+                        <div className='parameter-label'>
+                            <label htmlFor={inputId}>
+                                {parameter.name}
+                                {required && <span> (required)</span>}
+                            </label>
+                            <ParameterDescription id={descriptionId} name={parameter.name} description={parameter.description} />
+                        </div>
                         {parameter.enum ? (
                             <Select
                                 id={inputId}

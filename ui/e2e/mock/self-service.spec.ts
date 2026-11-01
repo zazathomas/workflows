@@ -4,7 +4,11 @@ const template = {
     apiVersion: 'argoproj.io/v1alpha1',
     kind: 'WorkflowTemplate',
     metadata: {name: 'sample-job', namespace: 'argo', labels: {team: 'platform'}, annotations: {'workflows.argoproj.io/description': 'A test job'}},
-    spec: {entrypoint: 'main', arguments: {parameters: [{name: 'message', value: 'default'}]}, templates: [{name: 'main', container: {image: 'alpine'}}]}
+    spec: {
+        entrypoint: 'main',
+        arguments: {parameters: [{name: 'message', value: 'default', description: 'Text the job prints when it runs.'}]},
+        templates: [{name: 'main', container: {image: 'alpine'}}]
+    }
 };
 const clusterTemplate = {
     ...template,
@@ -197,6 +201,17 @@ test('run details drawer follows the dark theme', async ({page}) => {
 
     const background = await drawer.evaluate(element => getComputedStyle(element).backgroundColor);
     expect(background).toBe('rgb(31, 41, 55)');
+});
+
+test('the submit panel reveals parameter descriptions from a question mark', async ({page}) => {
+    await mockApi(page);
+    await page.goto('/workflows/argo?sidePanel=submit-new-workflow&template=sample-job');
+    const description = page.getByText('Text the job prints when it runs.');
+    await expect(description).toBeHidden();
+    await page.getByRole('button', {name: 'Show description for message'}).click();
+    await expect(description).toBeVisible();
+    await page.getByRole('button', {name: 'Hide description for message'}).click();
+    await expect(description).toBeHidden();
 });
 
 test('shows the workflows name on a run page', async ({page}) => {

@@ -4,6 +4,7 @@ import {useEffect, useRef, useState} from 'react';
 import {Parameter} from '../models';
 import {ParameterSource, ParameterSources} from '../parameter-sources';
 import {services} from '../services';
+import {ParameterDescription} from './parameter-description';
 import {getValueFromParameter} from './parameters-input';
 
 import './dynamic-parameters-input.scss';
@@ -175,15 +176,13 @@ export function DynamicParametersInput(props: Props) {
                 const hasSourceSelect = !!source && sourceOptions !== undefined && !errors[parameter.name];
                 return (
                     <div key={parameter.name + '_' + index} style={{marginBottom: 14}}>
-                        <label htmlFor={inputId}>
-                            {parameter.name}
-                            {required && <span> (required)</span>}
-                        </label>
-                        {parameter.description && (
-                            <small id={descriptionId} className='parameter-description'>
-                                {parameter.description}
-                            </small>
-                        )}
+                        <div className='parameter-label'>
+                            <label htmlFor={inputId}>
+                                {parameter.name}
+                                {required && <span> (required)</span>}
+                            </label>
+                            <ParameterDescription id={descriptionId} name={parameter.name} description={parameter.description} />
+                        </div>
                         {hasSourceSelect ? (
                             <select
                                 id={inputId}

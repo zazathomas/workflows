@@ -1,0 +1,53 @@
+# ConfigMap source.
+#
+# No host allowlist is involved: the server reads the key with the caller's
+# Kubernetes identity, so the caller needs get on the ConfigMap. Omit
+# configMap.namespace to read from the namespace receiving the run; set it to read
+# from a shared namespace instead (subject to that namespace's RBAC).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: parameter-options
+  namespace: argo
+data:
+  environments: |
+    {"environments": [
+      {"label": "Staging", "value": "staging"},
+      {"label": "Production", "value": "production"}
+    ]}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: parameters-configmap
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/description: |
+      Options come from a ConfigMap key instead of an HTTP endpoint.
+    workflows.argoproj.io/parameter-sources: |
+      {
+        "environment": {
+          "configMap": {"name": "parameter-options", "key": "environments"},
+          "itemsPath": "environments",
+          "labelPath": "label",
+          "valuePath": "value"
+        }
+      }
+spec:
+  entrypoint: show
+  serviceAccountName: wf-runner
+  archiveLogs: false
+  arguments:
+    parameters:
+      - name: environment
+        description: Read from the parameter-options ConfigMap.
+  templates:
+    - name: show
+      inputs:
+        parameters:
+          - name: environment
+      container:
+        image: docker.io/library/alpine:3.20
+        command: [sh, -c]
+        args:
+          - echo "environment={{inputs.parameters.environment}}"

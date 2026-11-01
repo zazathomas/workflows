@@ -1,0 +1,43 @@
+# Dynamic parameter sources, one file per supported shape.
+#
+# All of these need:
+#   - client auth mode, or SSO with RBAC (the endpoint returns 403 otherwise);
+#   - the caller able to read the WorkflowTemplate (and the ConfigMap or Secret it
+#     references) with their own Kubernetes credentials;
+#   - for URL sources, the host in ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS.
+#
+# The submit panel shows the options as a dropdown. If a source fails, the field
+# falls back to free text and shows the error.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: parameters-url-array
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/description: |
+      The endpoint returns a JSON array of strings. Omit itemsPath, labelPath and
+      valuePath: the whole response becomes the option list.
+    workflows.argoproj.io/parameter-sources: |
+      {
+        "language": {
+          "url": "https://gist.githubusercontent.com/zazathomas/2bfaa69477d096fbb180e2d2a9ece799/raw/languages.json"
+        }
+      }
+spec:
+  entrypoint: show
+  serviceAccountName: wf-runner
+  archiveLogs: false
+  arguments:
+    parameters:
+      - name: language
+        description: A language from a public gist.
+  templates:
+    - name: show
+      inputs:
+        parameters:
+          - name: language
+      container:
+        image: docker.io/library/alpine:3.20
+        command: [sh, -c]
+        args:
+          - echo "language={{inputs.parameters.language}}"

@@ -1,0 +1,30 @@
+# Renewed codes: a second request needs a new event id.
+#
+# The UI deduplicates by run and event id, so reusing "device-1" would be ignored
+# as a replay. Emitting "device-2" prompts again, which is how a refreshed device
+# code reaches the user.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: run-actions-renewed
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/description: |
+      Ask for one code, wait, then ask again with a new id.
+    workflows-ui-action-marker: 'NEEDS_USER_ACTION:'
+    workflows-ui-action-container: main
+spec:
+  entrypoint: main
+  serviceAccountName: wf-runner
+  archiveLogs: false
+  templates:
+    - name: main
+      container:
+        image: docker.io/library/alpine:3.20
+        command: [sh, -c]
+        args:
+          - |
+            printf '%s\n' 'NEEDS_USER_ACTION:{"kind":"open-url","id":"device-1","title":"Sign in to GitHub (first code)","url":"https://github.com/login/device","code":"DEMO-1111"}'
+            sleep 30
+            printf '%s\n' 'NEEDS_USER_ACTION:{"kind":"open-url","id":"device-2","title":"Sign in to GitHub (renewed code)","url":"https://github.com/login/device","code":"DEMO-2222"}'
+            sleep 30

@@ -5,6 +5,16 @@ The server checks that the authenticated caller can read the selected template, 
 The submitted Workflow contains the selected values and does not retain the source configuration.
 This extension requires client auth mode or SSO with RBAC; it returns HTTP 403 in server auth mode or SSO without RBAC.
 
+## Examples
+
+Runnable WorkflowTemplates live in [`examples/`](../examples/README.md):
+
+- [`parameters-url-array.yaml`](../examples/parameters-url-array.yaml) - the response is an array of strings.
+- [`parameters-url-dependent.yaml`](../examples/parameters-url-dependent.yaml) - `{{team}}` in the URL with `dependsOn`, and an `enum` parameter feeding a fetched one.
+- [`parameters-configmap.yaml`](../examples/parameters-configmap.yaml) - ConfigMap source with `itemsPath`.
+- [`parameters-secret-header.yaml`](../examples/parameters-secret-header.yaml) - a header read from a Kubernetes Secret.
+- [`dynamic-parameters-gist.yaml`](../examples/dynamic-parameters-gist.yaml) - two parameters read different arrays from one public gist.
+
 ## Configure the source
 
 Add the `workflows.argoproj.io/parameter-sources` annotation to the template metadata.

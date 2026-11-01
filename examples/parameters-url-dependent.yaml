@@ -1,0 +1,49 @@
+# URL source with interpolation and dependsOn.
+#
+# The project list depends on the selected team: the URL contains {{team}}, so
+# the server waits for a team value and fetches a different file per team.
+# ${team} works as well as {{team}}. Listing the parameter in dependsOn is
+# optional when the URL already interpolates it, but it documents the intent.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: parameters-url-dependent
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/description: |
+      Choose a team, then a project from that team's list.
+    workflows.argoproj.io/parameter-sources: |
+      {
+        "project": {
+          "url": "https://gist.githubusercontent.com/zazathomas/2bfaa69477d096fbb180e2d2a9ece799/raw/{{team}}.json",
+          "itemsPath": "projects",
+          "labelPath": "label",
+          "valuePath": "value",
+          "dependsOn": ["team"]
+        }
+      }
+spec:
+  entrypoint: show
+  serviceAccountName: wf-runner
+  archiveLogs: false
+  arguments:
+    parameters:
+      - name: team
+        description: Changing this clears the project value and reloads its list.
+        enum: [team-a, team-b]
+        value: team-a
+      - name: project
+        description: Projects owned by the selected team.
+  templates:
+    - name: show
+      inputs:
+        parameters:
+          - name: team
+          - name: project
+      container:
+        image: docker.io/library/alpine:3.20
+        command: [sh, -c]
+        args:
+          - |
+            echo "team={{inputs.parameters.team}}"
+            echo "project={{inputs.parameters.project}}"

@@ -1,0 +1,29 @@
+# Run action without a one-time code.
+#
+# The URL already carries whatever the user needs, so the event omits "code".
+# github.com must be in ARGO_SERVER_RUN_ACTION_ALLOW_HOSTS and the pod needs
+# egress to it. Submit from the UI so the marker annotation is copied onto the Run.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: run-actions-link-only
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/description: |
+      Shows a link with no code, the smallest useful Run action.
+    workflows-ui-action-marker: 'NEEDS_USER_ACTION:'
+    workflows-ui-action-container: main
+spec:
+  entrypoint: main
+  serviceAccountName: wf-runner
+  archiveLogs: false
+  templates:
+    - name: main
+      container:
+        image: docker.io/library/alpine:3.20
+        command: [sh, -c]
+        args:
+          - |
+            printf '%s\n' 'NEEDS_USER_ACTION:{"kind":"open-url","id":"link-1","title":"Open the GitHub device login page","url":"https://github.com/login/device"}'
+            echo "waiting for the user to open the link"
+            sleep 60

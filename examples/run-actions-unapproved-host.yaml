@@ -1,0 +1,30 @@
+# Two events: one approved host, one rejected by the policy.
+#
+# The server's ARGO_SERVER_RUN_ACTION_ALLOW_HOSTS list decides which links are
+# clickable. The example.com line is well-formed but not approved, so the UI skips
+# it and warns that a marked line could not be used, while the github.com request
+# still works. Job authors cannot widen the list themselves.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: run-actions-unapproved-host
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/description: |
+      One link is offered; the unapproved host is ignored with a warning.
+    workflows-ui-action-marker: 'NEEDS_USER_ACTION:'
+    workflows-ui-action-container: main
+spec:
+  entrypoint: main
+  serviceAccountName: wf-runner
+  archiveLogs: false
+  templates:
+    - name: main
+      container:
+        image: docker.io/library/alpine:3.20
+        command: [sh, -c]
+        args:
+          - |
+            printf '%s\n' 'NEEDS_USER_ACTION:{"kind":"open-url","id":"rejected-1","title":"This host is not approved","url":"https://example.com/login","code":"DEMO-5555"}'
+            printf '%s\n' 'NEEDS_USER_ACTION:{"kind":"open-url","id":"approved-1","title":"This host is approved","url":"https://github.com/login/device","code":"DEMO-6666"}'
+            sleep 60

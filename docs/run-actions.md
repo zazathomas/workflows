@@ -4,6 +4,18 @@ workflows can show a link from a running Job when a person needs to finish a ste
 Only Jobs whose template carries an action marker are monitored.
 The normal Argo workflow status remains the source of truth; clicking the link does not approve the request or resume a suspended workflow.
 
+## Examples
+
+Runnable WorkflowTemplates live in [`examples/`](../examples/README.md):
+
+- [`run-actions-link-only.yaml`](../examples/run-actions-link-only.yaml) - a link with no code.
+- [`run-actions-renewed.yaml`](../examples/run-actions-renewed.yaml) - a second request with a new id, as a refreshed code arrives.
+- [`run-actions-expiry.yaml`](../examples/run-actions-expiry.yaml) - an ignored expired request and one that lapses after three minutes.
+- [`run-actions-sidecar.yaml`](../examples/run-actions-sidecar.yaml) - the marker comes from a sidecar container.
+- [`run-actions-unapproved-host.yaml`](../examples/run-actions-unapproved-host.yaml) - a well-formed request for a host outside the allowlist.
+- [`device-login-run-action.yaml`](../examples/device-login-run-action.yaml) - GitHub device flow, simulated or real.
+- [`run-action-demo.yaml`](../examples/run-action-demo.yaml) - two fake requests for UI testing.
+
 ## Configure a Job
 
 Add an annotation to a WorkflowTemplate or ClusterWorkflowTemplate:

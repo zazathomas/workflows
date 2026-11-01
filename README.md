@@ -40,6 +40,11 @@ appropriate permissions. “Job” here means a reusable Argo workflow template,
 Kubernetes `Job` resource. Advanced views retain Argo terminology where it helps
 when working with manifests or API responses.
 
+## Examples
+
+`examples/` holds runnable WorkflowTemplates for every supported dynamic parameter
+source and Run action shape; see [the examples index](examples/README.md).
+
 ## Prerequisites
 
 - Go (see the version in `go.mod`)

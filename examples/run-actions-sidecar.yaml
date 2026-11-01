@@ -1,0 +1,34 @@
+# Marker coming from a sidecar container.
+#
+# workflows-ui-action-container names the container whose logs carry the marker.
+# It defaults to main; set it when the process that learns the code runs in a
+# sidecar, and make sure that container prints one complete line per request.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: run-actions-sidecar
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/description: |
+      The sidecar prints the request; the main container keeps working.
+    workflows-ui-action-marker: 'NEEDS_USER_ACTION:'
+    workflows-ui-action-container: helper
+spec:
+  entrypoint: main
+  serviceAccountName: wf-runner
+  archiveLogs: false
+  templates:
+    - name: main
+      container:
+        image: docker.io/library/alpine:3.20
+        command: [sh, -c]
+        args:
+          - echo "main container started"; sleep 90
+      sidecars:
+        - name: helper
+          image: docker.io/library/alpine:3.20
+          command: [sh, -c]
+          args:
+            - |
+              printf '%s\n' 'NEEDS_USER_ACTION:{"kind":"open-url","id":"sidecar-1","title":"Sign in from the sidecar","url":"https://github.com/login/device","code":"DEMO-4444"}'
+              sleep 90

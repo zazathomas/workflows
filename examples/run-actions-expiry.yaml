@@ -1,0 +1,30 @@
+# Expiry: stale requests are ignored, live ones disappear when they lapse.
+#
+# The first line has an expiresAt in the past, so the UI ignores it and reports
+# that a marked line could not be used. The second is valid for three minutes; the
+# dialog and indicator drop it after that, while the Run keeps going.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: run-actions-expiry
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/description: |
+      One expired request and one request that expires three minutes after it starts.
+    workflows-ui-action-marker: 'NEEDS_USER_ACTION:'
+    workflows-ui-action-container: main
+spec:
+  entrypoint: main
+  serviceAccountName: wf-runner
+  archiveLogs: false
+  templates:
+    - name: main
+      container:
+        image: docker.io/library/alpine:3.20
+        command: [sh, -c]
+        args:
+          - |
+            printf '%s\n' 'NEEDS_USER_ACTION:{"kind":"open-url","id":"expired-1","title":"This request already expired","url":"https://github.com/login/device","code":"DEMO-0000","expiresAt":"2000-01-01T00:00:00Z"}'
+            expires=$(date -u -d "@$(( $(date +%s) + 180 ))" +%Y-%m-%dT%H:%M:%SZ)
+            printf 'NEEDS_USER_ACTION:{"kind":"open-url","id":"live-1","title":"This request expires in three minutes","url":"https://github.com/login/device","code":"DEMO-3333","expiresAt":"%s"}\n' "$expires"
+            sleep 200

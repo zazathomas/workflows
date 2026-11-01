@@ -4,6 +4,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: run-action-demo
+  namespace: argo
   labels:
     app.kubernetes.io/part-of: run-action-demo
 ---
@@ -11,6 +12,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: run-action-demo
+  namespace: argo
   labels:
     app.kubernetes.io/part-of: run-action-demo
 rules:
@@ -22,6 +24,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: run-action-demo
+  namespace: argo
   labels:
     app.kubernetes.io/part-of: run-action-demo
 roleRef:
@@ -37,6 +40,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
   name: run-action-demo
+  namespace: argo
   labels:
     app.kubernetes.io/part-of: run-action-demo
   annotations:

@@ -125,10 +125,12 @@ export function WorkflowTemplateList({match, location, history}: RouteComponentP
     const [templates, setTemplates] = useState<WorkflowTemplate[]>();
     const [clusterTemplates, setClusterTemplates] = useState<WorkflowTemplate[]>();
     const [clusterError, setClusterError] = useState<Error>();
+    const [searchTruncated, setSearchTruncated] = useState(false);
     useEffect(() => {
         let cancelled = false;
         setTemplates(undefined);
         setError(undefined);
+        setSearchTruncated(false);
         if (jobType === 'cluster') {
             setTemplates([]);
             return () => {
@@ -150,6 +152,7 @@ export function WorkflowTemplateList({match, location, history}: RouteComponentP
                     setTemplates(list.items || []);
                     return;
                 }
+                setSearchTruncated(!!('truncated' in list && list.truncated));
                 const matching = (list.items || []).filter(template => matchesNameOrTitle(template, namePattern) && matchesLabelContains(template, labelContains));
                 const offset = searchPageOffset(pagination.offset);
                 if (offset > 0 && offset >= matching.length) {
@@ -241,6 +244,7 @@ export function WorkflowTemplateList({match, location, history}: RouteComponentP
                     }}
                 />
                 <div className='filter-bar__results'>
+                    {searchTruncated && <p role='status'>Search scanned the first 2,000 namespace jobs only. Refine your search to find other matches.</p>}
                     {jobType === 'both' && pagination.limit !== 0 && <p>Namespace templates are paginated; cluster templates appear on every namespace page.</p>}
                     {error && (
                         <>
@@ -256,7 +260,7 @@ export function WorkflowTemplateList({match, location, history}: RouteComponentP
                     )}
                     {loading ? (
                         <>
-                            {(namePattern.trim() || labelContains.trim()) && <p role='status'>Searching all jobs; this may take time.</p>}
+                            {(namePattern.trim() || labelContains.trim()) && <p role='status'>Searching the first 2,000 namespace jobs...</p>}
                             <Loading />
                         </>
                     ) : totalShown === 0 ? (

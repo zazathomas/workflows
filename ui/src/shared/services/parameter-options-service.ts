@@ -1,4 +1,4 @@
-import {interpolateParameterSource, ParameterSource} from '../parameter-sources';
+import {ParameterSource} from '../parameter-sources';
 import requests from './requests';
 
 export interface ParameterOption {
@@ -17,7 +17,8 @@ export const ParameterOptionsService = {
         namespace: string,
         templateKind: 'WorkflowTemplate' | 'ClusterWorkflowTemplate',
         templateName: string,
-        parameterName: string
+        parameterName: string,
+        signal?: AbortSignal
     ): Promise<ParameterOption[]> {
         const query = new URLSearchParams({
             templateKind,
@@ -29,7 +30,6 @@ export const ParameterOptionsService = {
             valuePath: source.valuePath || ''
         });
         if (source.url) {
-            query.set('url', interpolateParameterSource(source.url, parameters));
             query.set('parameters', JSON.stringify(parameters));
         } else if (source.configMap) {
             query.set('configMapName', source.configMap.name);
@@ -44,6 +44,10 @@ export const ParameterOptionsService = {
             query.set('secretKey', source.secret.key);
             query.set('header', source.secret.header);
         }
-        return requests.get(`api/v1/extensions/parameter-options?${query.toString()}`).then(res => (res.body as ParameterOptionsResponse).items || []);
+        const request = requests.get(`api/v1/extensions/parameter-options?${query.toString()}`);
+        const abort = () => request.abort();
+        if (signal?.aborted) abort();
+        else signal?.addEventListener('abort', abort, {once: true});
+        return request.then(res => (res.body as ParameterOptionsResponse).items || []).finally(() => signal?.removeEventListener('abort', abort));
     }
 };

@@ -49,6 +49,11 @@ It defaults to empty, which disables clickable run actions.
 This is a browser navigation policy, separate from `ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS` and from server egress controls.
 Job authors cannot extend the server's approved host list.
 
+A template editor can put a device code from their own OAuth client in a marked log line and make it look like a sign-in request from the Job.
+The host allowlist checks the link destination, not who issued the code.
+Restrict who can edit WorkflowTemplates and ClusterWorkflowTemplates with `workflows-ui-action-marker`, and approve those templates before users submit them.
+When a prompt appears, check the Run namespace, Job and destination host, and authorize only a device request you started.
+
 ## Try the demo Job
 
 On a disposable installation of a [supported upstream release](compatibility.md), use [the demo template](../examples/run-action-demo.yaml) to exercise the UI without real credentials.
@@ -83,11 +88,11 @@ When a marked line appears, a dialog shows the request, a link that opens in ano
 The original tab continues to follow the Run even if the user navigates elsewhere in workflows.
 A Run action indicator lets the user reopen a dismissed request.
 Requests are handled one at a time and removed when the Run finishes or the code expires.
-The UI follows at most four opted-in Runs at once; additional Runs wait for a monitoring slot, and the UI shows that delay.
+The UI follows at most two opted-in Runs at once; additional Runs wait for a monitoring slot, and the UI shows that delay.
 The UI monitors while it is open; it cannot notify a user after the browser is closed.
 Refreshing the same tab restores tracked active Runs and scans available logs again, provided the pod logs and the effective Kubernetes log permissions are still available.
 
-The server's log endpoint lists and watches workflow pods and reads their logs using the effective credentials for the current auth mode.
+When a Run has one pod, the UI requests only that pod's logs; otherwise the server's log endpoint lists and watches the Run's pods using the effective credentials for the current auth mode.
 In client auth mode, grant the submitter the appropriate workflow and pod-log permissions.
 Do not expose server auth mode to untrusted users, since it uses the server's service account.
 Pods removed by pod GC can make an old request unavailable; configure a suitable pod retention window for these Jobs.

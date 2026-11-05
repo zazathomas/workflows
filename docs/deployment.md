@@ -27,7 +27,7 @@ Use the chart version from the compatibility matrix, and leave `controller.image
        tag: '4.1.6@sha256:DIGEST'
      extraEnv:
        - name: ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS
-         value: 'gist.github.com'
+         value: 'catalog.example.com'
        - name: ARGO_SERVER_RUN_ACTION_ALLOW_HOSTS
          value: 'github.com,login.microsoftonline.com'
    ```
@@ -87,6 +87,8 @@ Both variables belong on the `argo-server` Deployment, never in the controller C
 | `ARGO_SERVER_RUN_ACTION_ALLOW_HOSTS` | Browser links from [Run actions](run-actions.md) | Empty, so no links are offered |
 
 Use exact DNS hostnames without schemes, ports, or wildcards.
+In production, allow only catalog endpoints you control; code-hosting and CDN domains let template editors choose content that shapes submissions.
+Secret-backed sources send the configured header to that host, so keep their templates in a namespace where you control who can edit them.
 Approving a host for one list does not approve it for the other.
 ConfigMap-backed parameter sources need no host entry, but they still need the caller's ConfigMap RBAC.
 Run-action hosts do not grant the server network egress, and users still need permission to read workflow and pod logs.
@@ -112,6 +114,8 @@ Either way, keep the controller, executor, and CRDs on a release listed in the c
 ## Security notes
 
 The patch sets `--auth-mode=client`, which the parameter-source extension needs; keep your own auth, TLS, and namespace arguments if they differ.
+The example sets `IP_KEY_FUNC_HEADERS=X-Forwarded-For`; use it only behind an ingress that overwrites that header, or remove the setting.
+Size `--api-rate-limit` for aggregate gateway traffic, and set replicas, resource requests, and a disruption budget to suit your cluster.
 Do not put port 2746 on the internet without an ingress or gateway that enforces TLS, access controls, and request limits.
 Do not expose server auth mode to untrusted users, because it uses the server's service account.
 Review the server ClusterRole before applying it, especially access to Secrets and namespaces.

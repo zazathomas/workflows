@@ -47,6 +47,7 @@ func (h *OptionsHandler) authorizeSource(r *http.Request) error {
 	client := auth.GetWfClient(r.Context()).ArgoprojV1alpha1()
 	var annotations map[string]string
 	var parameters []string
+	var uid, version string
 	switch kind {
 	case "WorkflowTemplate":
 		template, err := client.WorkflowTemplates(namespace).Get(r.Context(), name, metav1.GetOptions{})
@@ -54,6 +55,7 @@ func (h *OptionsHandler) authorizeSource(r *http.Request) error {
 			return errors.New("template is not available to this user")
 		}
 		annotations = template.Annotations
+		uid, version = string(template.UID), template.ResourceVersion
 		for _, p := range template.Spec.Arguments.Parameters {
 			parameters = append(parameters, p.Name)
 		}
@@ -63,6 +65,7 @@ func (h *OptionsHandler) authorizeSource(r *http.Request) error {
 			return errors.New("template is not available to this user")
 		}
 		annotations = template.Annotations
+		uid, version = string(template.UID), template.ResourceVersion
 		for _, p := range template.Spec.Arguments.Parameters {
 			parameters = append(parameters, p.Name)
 		}
@@ -85,7 +88,7 @@ func (h *OptionsHandler) authorizeSource(r *http.Request) error {
 		return errors.New("parameter mapping differs from the template")
 	}
 	if source.ConfigMap != nil {
-		if q.Get("url") != "" || q.Get("configMapName") != source.ConfigMap.Name || q.Get("configMapKey") != source.ConfigMap.Key || q.Get("configMapNamespace") != source.ConfigMap.Namespace {
+		if q.Has("url") || q.Get("configMapName") != source.ConfigMap.Name || q.Get("configMapKey") != source.ConfigMap.Key || q.Get("configMapNamespace") != source.ConfigMap.Namespace {
 			return errors.New("ConfigMap source differs from the template")
 		}
 	} else {
@@ -100,9 +103,11 @@ func (h *OptionsHandler) authorizeSource(r *http.Request) error {
 			}
 			return strings.ReplaceAll(url.QueryEscape(values[name]), "+", "%20")
 		})
-		if q.Get("url") != expectedURL || q.Get("configMapName") != "" {
+		if q.Has("url") || q.Get("configMapName") != "" {
 			return errors.New("URL source differs from the template")
 		}
+		// The URL is derived solely from the readable template; never accept a client URL.
+		q.Set("url", expectedURL)
 	}
 	if source.Secret == nil {
 		if q.Get("secretName") != "" || q.Get("secretNamespace") != "" || q.Get("secretKey") != "" || q.Get("header") != "" {
@@ -120,5 +125,8 @@ func (h *OptionsHandler) authorizeSource(r *http.Request) error {
 			return errors.New("secret source differs from the template")
 		}
 	}
+	q.Set("sourceUID", uid)
+	q.Set("sourceVersion", version)
+	r.URL.RawQuery = q.Encode()
 	return nil
 }

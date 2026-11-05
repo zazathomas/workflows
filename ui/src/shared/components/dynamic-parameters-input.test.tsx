@@ -44,6 +44,32 @@ describe('DynamicParametersInput', () => {
         ]);
     });
 
+    it('aborts superseded requests and debounces text dependencies', async () => {
+        const sources = {repository: {url: 'https://example.test/{{organization}}', dependsOn: ['organization']}};
+        const getOptions = jest
+            .spyOn(services.parameterOptions, 'get')
+            .mockImplementationOnce(() => new Promise(() => undefined))
+            .mockResolvedValue([]);
+        const view = (organization: string) => (
+            <DynamicParametersInput
+                namespace='argo'
+                templateKind='WorkflowTemplate'
+                templateName='sample'
+                parameters={[{name: 'organization', value: organization}, {name: 'repository'}]}
+                sources={sources}
+                onChange={() => undefined}
+            />
+        );
+        const {rerender} = render(view('first'));
+        await waitFor(() => expect(getOptions).toHaveBeenCalledTimes(1));
+        const firstSignal = getOptions.mock.calls[0][6];
+        rerender(view('second'));
+        expect(firstSignal.aborted).toBe(true);
+        expect(getOptions).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(getOptions).toHaveBeenCalledTimes(2));
+        expect(getOptions.mock.calls[1][1].organization).toBe('second');
+    });
+
     it('exposes source failures and leaves a manual input available', async () => {
         jest.spyOn(services.parameterOptions, 'get').mockRejectedValue(new Error('source unavailable'));
 

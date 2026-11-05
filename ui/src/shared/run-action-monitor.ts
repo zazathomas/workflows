@@ -1,6 +1,7 @@
 import {Subscription} from 'rxjs';
 
 import {Workflow} from './models';
+import {getPodName} from './pod-name';
 import {RetryWatch} from './retry-watch';
 import {ACTION_CONTAINER_ANNOTATION, ACTION_MARKER_ANNOTATION, configFromAnnotations, parseRunActionLine, RunActionEvent} from './run-actions';
 import {services} from './services';
@@ -26,11 +27,17 @@ interface ActiveRun {
     retries: number;
     failures: number;
     reportedError: boolean;
+    podName?: string;
 }
 
-const MAX_ACTIVE = 4;
+const MAX_ACTIVE = 2;
 const MAX_TRACKED = 20;
 const TERMINAL_PHASES = ['Succeeded', 'Failed', 'Error'];
+
+function singlePodName(workflow: Workflow): string | undefined {
+    const pods = Object.values(workflow.status?.nodes || {}).filter(node => node.type === 'Pod');
+    return pods.length === 1 ? getPodName(workflow, pods[0]) : undefined;
+}
 
 function finished(workflow: Workflow) {
     return !!workflow.status?.finishedAt || TERMINAL_PHASES.includes(workflow.status?.phase);
@@ -188,11 +195,16 @@ export class RunActionMonitor {
                     return;
                 }
                 entry.retries = 0;
+                entry.podName = singlePodName(workflow);
                 entry.watch = new RetryWatch<Workflow>(
                     () => services.workflows.watch({namespace: run.namespace, name: run.name}),
                     () => undefined,
                     e => {
                         if (e.object?.metadata.uid !== run.uid || e.type === 'DELETED' || finished(e.object)) this.remove(run.uid);
+                        else if (this.active.get(run.uid) === entry && entry.podName !== singlePodName(e.object)) {
+                            entry.podName = singlePodName(e.object);
+                            this.openLogs(entry);
+                        }
                     },
                     () => {
                         // A dropped watch must not leave a completed run streaming logs.
@@ -217,7 +229,7 @@ export class RunActionMonitor {
     private openLogs(entry: ActiveRun) {
         const {run} = entry;
         entry.logs?.unsubscribe();
-        entry.logs = services.workflows.watchRunActionLogs(run.namespace, run.name, run.marker, run.container).subscribe({
+        entry.logs = services.workflows.watchRunActionLogs(run.namespace, run.name, run.marker, run.container, entry.podName).subscribe({
             next: log => {
                 if (!log) {
                     // The stream is open, so any earlier warning was transient.

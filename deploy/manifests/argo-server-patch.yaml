@@ -12,8 +12,11 @@ spec:
         - name: argo-server
           # Replace this with the signed GHCR digest from a published release.
           image: ghcr.io/zazathomas/workflows@sha256:REPLACE_WITH_RELEASE_DIGEST
-          args: [server, --auth-mode=client]
+          args: [server, --auth-mode=client, --api-rate-limit=2000]
           env:
+            # Only enable behind a trusted ingress that overwrites X-Forwarded-For.
+            - name: IP_KEY_FUNC_HEADERS
+              value: X-Forwarded-For
             # Leave empty to disable HTTPS URL sources until trusted hosts are selected.
             - name: ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS
               value: ''

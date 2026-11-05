@@ -113,6 +113,7 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
     const [links, setLinks] = useState<models.Link[]>([]);
     const [columns, setColumns] = useState<models.Column[]>([]);
     const [error, setError] = useState<Error>();
+    const [searchTruncated, setSearchTruncated] = useState(false);
     const [nameValue, setNameValue] = useState<string>(() => {
         return queryParams.get(NAME_FILTER_KEYS.find(key => queryParams.get(key))) || '';
     });
@@ -255,6 +256,7 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
         const searchAll = (nameFilter === 'Contains' && !!nameValue.trim()) || !!labelContains.trim();
         let cancelled = false;
         setWorkflows(undefined);
+        setSearchTruncated(false);
         const listWatch = new ListWatch(
             () =>
                 searchAll
@@ -287,6 +289,7 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
                       ),
             (resourceVersion: string) => services.workflows.watchFields({namespace, phases, labels, resourceVersion, archiveFilter}),
             metadata => {
+                setSearchTruncated(searchAll && !!(metadata as typeof metadata & {scanTruncated?: boolean}).scanTruncated);
                 setError(null);
                 if (!searchAll) setPagination({...pagination, nextOffset: metadata.continue});
                 clearSelectedWorkflows();
@@ -418,10 +421,11 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
                 </div>
                 <div className='workflows-list__results'>
                     <ErrorNotice error={error} />
+                    {searchTruncated && <p role='status'>Search scanned the first 2,000 runs only. Refine your search to find other matches.</p>}
                     {!workflows ? (
                         !error && (
                             <>
-                                {((nameFilter === 'Contains' && nameValue.trim()) || labelContains.trim()) && <p role='status'>Searching all runs; this may take time.</p>}
+                                {((nameFilter === 'Contains' && nameValue.trim()) || labelContains.trim()) && <p role='status'>Searching the first 2,000 runs...</p>}
                                 <Loading />
                             </>
                         )

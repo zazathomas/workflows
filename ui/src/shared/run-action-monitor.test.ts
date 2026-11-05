@@ -33,7 +33,7 @@ test('tracks only opted-in running workflows, deduplicates and accepts renewed c
     expect(monitor.track({...run('unmarked'), metadata: {...run('unmarked').metadata, annotations: {}}} as Workflow)).toBe(false);
     expect(monitor.track(run('one'))).toBe(true);
     await Promise.resolve();
-    expect(logSpy).toHaveBeenCalledWith('argo', 'job-one', marker, 'main');
+    expect(logSpy).toHaveBeenCalledWith('argo', 'job-one', marker, 'main', undefined);
     const line = (id: string) => logs.next({content: marker + JSON.stringify(event(id)), podName: 'job-one-1'});
     line('first');
     line('first');
@@ -86,6 +86,25 @@ test('warns when a marked log line cannot become a trusted action', async () => 
     monitor.stop();
 });
 
+test('follows a single workflow pod and widens the watch when another pod appears', async () => {
+    const workflow = run('pod');
+    workflow.metadata.annotations['workflows.argoproj.io/pod-name-format'] = 'v1';
+    workflow.status.nodes = {'pod-1': {id: 'pod-1', type: 'Pod'} as any};
+    const watch = new Subject<any>();
+    jest.spyOn(services.workflows, 'get').mockResolvedValue(workflow);
+    jest.spyOn(services.workflows, 'watch').mockReturnValue(watch);
+    const logs = jest.spyOn(services.workflows, 'watchRunActionLogs').mockReturnValue(new Subject<any>());
+    const monitor = new RunActionMonitor('alice', jest.fn(), jest.fn(), jest.fn(), jest.fn());
+    monitor.start();
+    monitor.setPolicy(['github.com']);
+    monitor.track(workflow);
+    await Promise.resolve();
+    expect(logs).toHaveBeenLastCalledWith('argo', 'job-pod', marker, 'main', 'pod-1');
+    watch.next({type: 'MODIFIED', object: {...workflow, status: {...workflow.status, nodes: {...workflow.status.nodes, 'pod-2': {id: 'pod-2', type: 'Pod'}}}}});
+    expect(logs).toHaveBeenLastCalledWith('argo', 'job-pod', marker, 'main', undefined);
+    monitor.stop();
+});
+
 test('limits concurrent streams and starts a queued run when a slot opens', async () => {
     const watches = new Map<string, Subject<any>>();
     jest.spyOn(services.workflows, 'get').mockImplementation(async (_namespace, name) => run(name.slice('job-'.length)));
@@ -100,12 +119,12 @@ test('limits concurrent streams and starts a queued run when a slot opens', asyn
     monitor.setPolicy(['github.com']);
     for (let index = 0; index < 5; index++) monitor.track(run(String(index)));
     await Promise.resolve();
-    expect(logs).toHaveBeenCalledTimes(4);
-    expect(onChange).toHaveBeenLastCalledWith(expect.any(Array), 1);
+    expect(logs).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenLastCalledWith(expect.any(Array), 3);
     watches.get('job-0').next({type: 'MODIFIED', object: run('0', 'Succeeded')});
     await Promise.resolve();
-    expect(logs).toHaveBeenCalledTimes(5);
-    expect(onChange).toHaveBeenLastCalledWith(expect.any(Array), 0);
+    expect(logs).toHaveBeenCalledTimes(3);
+    expect(onChange).toHaveBeenLastCalledWith(expect.any(Array), 2);
     monitor.stop();
 });
 

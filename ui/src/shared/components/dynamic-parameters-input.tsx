@@ -39,9 +39,9 @@ function getSourceDependencyNames(source: ParameterSource): string[] {
     return Array.from(dependencies).sort();
 }
 
-function getSourceRequestKey(source: ParameterSource, values: Record<string, string>, namespace: string, refreshKey: number) {
+function getSourceRequestKey(source: ParameterSource, values: Record<string, string>, namespace: string, templateKind: string, templateName: string, refreshKey: number) {
     const dependencyValues = getSourceDependencyNames(source).map(name => [name, values[name] || '']);
-    return JSON.stringify({source, namespace, dependencyValues, refreshKey});
+    return JSON.stringify({source, namespace, templateKind, templateName, dependencyValues, refreshKey});
 }
 
 function isRequired(parameter: Parameter): boolean {
@@ -55,6 +55,10 @@ export function DynamicParametersInput(props: Props) {
     const [refreshKeys, setRefreshKeys] = useState<Record<string, number>>({});
     const [announcement, setAnnouncement] = useState('');
     const cache = useRef<Record<string, CachedOptions>>({});
+    const inFlight = useRef<Record<string, {key: string; controller: AbortController; promise: Promise<Option[]>}>>({});
+    const previousKeys = useRef<Record<string, string>>({});
+
+    useEffect(() => () => Object.values(inFlight.current).forEach(entry => entry.controller.abort()), []);
     const parameterValuesKey = JSON.stringify(props.parameters.map(parameter => [parameter.name, getValueFromParameter(parameter) || '']));
 
     useEffect(() => {
@@ -64,17 +68,27 @@ export function DynamicParametersInput(props: Props) {
             return result;
         }, {});
         const sourceEntries = Object.entries(props.sources);
+        for (const name of Object.keys(inFlight.current)) {
+            if (!(name in props.sources)) {
+                inFlight.current[name].controller.abort();
+                delete inFlight.current[name];
+            }
+        }
         const nextOptions: Record<string, Option[]> = {};
         const nextErrors: Record<string, string> = {};
         const loadingNames: Record<string, boolean> = {};
         const requests: Array<Promise<{name: string; sourceOptions?: Option[]; error?: string; key: string}>> = [];
 
         sourceEntries.forEach(([name, source]) => {
-            const key = getSourceRequestKey(source, values, props.namespace, refreshKeys[name] || 0);
+            const key = getSourceRequestKey(source, values, props.namespace, props.templateKind, props.templateName, refreshKeys[name] || 0);
             const missingDependency = getSourceDependencyNames(source).some(dependency => !values[dependency]);
             const cached = cache.current[name];
 
+            const previous = previousKeys.current[name];
+            previousKeys.current[name] = key;
             if (missingDependency) {
+                inFlight.current[name]?.controller.abort();
+                delete inFlight.current[name];
                 nextOptions[name] = [];
                 return;
             }
@@ -89,9 +103,38 @@ export function DynamicParametersInput(props: Props) {
             }
 
             loadingNames[name] = true;
+            let entry = inFlight.current[name];
+            if (entry && entry.key !== key) {
+                entry.controller.abort();
+                entry = undefined;
+            }
+            if (!entry) {
+                const controller = new AbortController();
+                const load = () => services.parameterOptions.get(source, values, props.namespace, props.templateKind, props.templateName, name, controller.signal);
+                const promise =
+                    previous && previous !== key && getSourceDependencyNames(source).length > 0
+                        ? new Promise<Option[]>((resolve, reject) => {
+                              const timer = setTimeout(() => load().then(resolve, reject), 300);
+                              controller.signal.addEventListener(
+                                  'abort',
+                                  () => {
+                                      clearTimeout(timer);
+                                      reject(new Error('Request superseded'));
+                                  },
+                                  {once: true}
+                              );
+                          })
+                        : load();
+                entry = {key, controller, promise};
+                inFlight.current[name] = entry;
+                promise
+                    .finally(() => {
+                        if (inFlight.current[name] === entry) delete inFlight.current[name];
+                    })
+                    .catch(() => undefined);
+            }
             requests.push(
-                services.parameterOptions
-                    .get(source, values, props.namespace, props.templateKind, props.templateName, name)
+                entry.promise
                     .then(sourceOptions => ({name, sourceOptions, key}))
                     .catch(error => ({name, error: error instanceof Error ? error.message : 'Failed to load options', key}))
             );
@@ -131,7 +174,7 @@ export function DynamicParametersInput(props: Props) {
         return () => {
             cancelled = true;
         };
-    }, [parameterValuesKey, props.namespace, props.sources, refreshKeys]);
+    }, [parameterValuesKey, props.namespace, props.templateKind, props.templateName, props.sources, refreshKeys]);
 
     function onParameterChange(parameter: Parameter, value: string) {
         const cleared = new Set([parameter.name]);

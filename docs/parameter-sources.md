@@ -104,13 +104,16 @@ Without this variable, HTTPS URL sources are disabled and ConfigMap sources cont
 The server rejects non-HTTPS URLs, embedded URL credentials, ports other than 443, hosts outside this list, private or non-public network targets, failed redirects, responses larger than 2 MiB, and invalid JSON.
 The host allowlist applies only to `url` sources.
 The endpoint is available at `/api/v1/extensions/parameter-options`.
-Requests identify a readable WorkflowTemplate or ClusterWorkflowTemplate, its parameter, and the intended run namespace; callers cannot supply an arbitrary source that differs from that template's annotation.
+Requests identify a readable WorkflowTemplate or ClusterWorkflowTemplate, its parameter, and the intended run namespace.
+The server builds the URL from the template annotation and submitted parameter values; callers cannot supply a URL.
 The endpoint uses GET requests, so interpolated parameter values may appear in proxy logs and browser history.
 Do not put credentials or other sensitive values in interpolated parameters.
 
 ## Limits
 
 The server fetches with a 10 second timeout and reads at most 2 MiB.
+Each credential may make five requests per second with a burst of ten, and each server replica allows 32 concurrent outbound fetches; excess requests receive HTTP 429.
+Successful URL responses without Secret headers are cached for 30 seconds by template version and URL.
 A source may return at most 1000 options, and each label or value may be at most 512 characters; larger responses are reported as an error instead of being truncated.
 Malformed entries in `ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS` stop the server at startup rather than being ignored, so a typo cannot silently disable a source.
 

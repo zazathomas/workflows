@@ -31,6 +31,7 @@ func SetAuthCookie(w http.ResponseWriter, value, path string, expires time.Time,
 		Expires:  expires,
 		SameSite: http.SameSiteStrictMode,
 		Secure:   secure,
+		HttpOnly: true,
 	})
 }
 
@@ -44,5 +45,6 @@ func ClearAuthCookie(w http.ResponseWriter, path string, secure bool) {
 		MaxAge:   -1,
 		SameSite: http.SameSiteStrictMode,
 		Secure:   secure,
+		HttpOnly: true,
 	})
 }

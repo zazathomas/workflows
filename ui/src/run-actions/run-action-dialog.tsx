@@ -49,6 +49,7 @@ export function RunActionDialog({action, onClose, onOpen, onViewRun}: {action: P
                 <p>
                     Check the destination before signing in: <strong>{event.host}</strong>
                 </p>
+                <p role='note'>Job template editors can choose this sign-in prompt and its code. Only authorize a device request you started and expect.</p>
                 {event.code && (
                     <div className='run-action-dialog__code'>
                         <span>One-time code</span>

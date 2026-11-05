@@ -29,8 +29,15 @@ describe('ParameterOptionsService', () => {
 
         expect(options).toEqual([{label: 'Argo', value: 'argoproj/argo-workflows'}]);
         expect(requests.get).toHaveBeenCalledWith(
-            'api/v1/extensions/parameter-options?templateKind=WorkflowTemplate&templateName=sample&parameterName=repository&namespace=argo&itemsPath=%24.items&labelPath=name&valuePath=full_name&url=https%3A%2F%2Fapi.github.com%2Frepos%3Fq%3Dargoproj&parameters=%7B%22organization%22%3A%22argoproj%22%7D&secretNamespace=argo&secretName=github-token&secretKey=token&header=Authorization'
+            'api/v1/extensions/parameter-options?templateKind=WorkflowTemplate&templateName=sample&parameterName=repository&namespace=argo&itemsPath=%24.items&labelPath=name&valuePath=full_name&parameters=%7B%22organization%22%3A%22argoproj%22%7D&secretNamespace=argo&secretName=github-token&secretKey=token&header=Authorization'
         );
+    });
+
+    it('sends special dependency values without sending a client URL', async () => {
+        (requests.get as jest.Mock).mockResolvedValue({body: {items: []}});
+        await ParameterOptionsService.get({url: 'https://catalog.example.com/{{team}}'}, {team: 'team (east)'}, 'argo', 'WorkflowTemplate', 'job', 'region');
+        expect(requests.get).toHaveBeenCalledWith(expect.stringContaining('parameters=%7B%22team%22%3A%22team+%28east%29%22%7D'));
+        expect((requests.get as jest.Mock).mock.calls[0][0]).not.toMatch(/[?&]url=/);
     });
 
     it('requests ConfigMap options from the submitting namespace', async () => {

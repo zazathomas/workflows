@@ -1,4 +1,4 @@
-import {fetchAllPages, matchesLabelContains, matchesNameOrTitle, matchesWorkflowName, searchPageOffset} from './name-title-search';
+import {fetchAllPages, matchesLabelContains, matchesNameOrTitle, matchesWorkflowName, MAX_SEARCH_PAGES, searchPageOffset} from './name-title-search';
 
 describe('name and title search', () => {
     it('matches resource names and title annotations without matching descriptions', () => {
@@ -27,12 +27,12 @@ describe('name and title search', () => {
         expect(matchesWorkflowName(resource, 'alpha-123', 'NotEquals')).toBe(false);
     });
 
-    it('scans all server pages and keeps the first resource version', async () => {
+    it('scans available server pages and keeps the first resource version', async () => {
         const load = jest
             .fn()
             .mockResolvedValueOnce({metadata: {continue: 'next', resourceVersion: '1'}, items: [1]})
             .mockResolvedValueOnce({metadata: {resourceVersion: '2'}, items: [2]});
-        await expect(fetchAllPages<number>(load)).resolves.toEqual({metadata: {resourceVersion: '1', continue: undefined}, items: [1, 2]});
+        await expect(fetchAllPages<number>(load)).resolves.toEqual({metadata: {resourceVersion: '1', continue: undefined}, items: [1, 2], truncated: false});
         expect(load).toHaveBeenNthCalledWith(1, {limit: 200, offset: undefined});
         expect(load).toHaveBeenNthCalledWith(2, {limit: 200, offset: 'next'});
     });
@@ -45,6 +45,12 @@ describe('name and title search', () => {
             .mockResolvedValueOnce({metadata: {continue: 'next'}, items: []})
             .mockRejectedValueOnce(new Error('denied'));
         await expect(fetchAllPages(failed)).rejects.toThrow('denied');
+    });
+
+    it('stops after ten pages and signals that the search is incomplete', async () => {
+        const load = jest.fn().mockImplementation(async ({offset}: {offset?: string}) => ({metadata: {continue: offset ? String(Number(offset) + 1) : '1'}, items: [1]}));
+        await expect(fetchAllPages(load)).resolves.toEqual({items: Array(MAX_SEARCH_PAGES).fill(1), metadata: {continue: undefined, scanTruncated: true}, truncated: true});
+        expect(load).toHaveBeenCalledTimes(MAX_SEARCH_PAGES);
     });
 
     it('recognizes only search pagination offsets', () => {

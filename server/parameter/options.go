@@ -2,6 +2,7 @@ package parameter
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +14,10 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/evilmonkeyinc/jsonpath"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -25,10 +29,11 @@ import (
 )
 
 const (
-	maxResponseSize   = 2 << 20
-	maxOptions        = 1000
-	maxOptionTextSize = 512
-	requestTimeout    = 10 * time.Second
+	maxResponseSize      = 2 << 20
+	maxOptions           = 1000
+	maxOptionTextSize    = 512
+	requestTimeout       = 10 * time.Second
+	maxConcurrentFetches = 32
 )
 
 var dnsLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -64,6 +69,20 @@ func ParseHosts(value string) ([]string, error) {
 type OptionsHandler struct {
 	allowedHosts map[string]struct{}
 	client       *http.Client
+	fetchSlots   chan struct{}
+	mu           sync.Mutex
+	limits       map[[32]byte]*identityLimit
+	cache        map[string]cachedBody
+}
+
+type identityLimit struct {
+	limiter  *rate.Limiter
+	lastUsed time.Time
+}
+
+type cachedBody struct {
+	body    []byte
+	expires time.Time
 }
 
 // OptionsHandlerConfig configures an OptionsHandler.
@@ -93,11 +112,12 @@ func NewOptionsHandler(config OptionsHandlerConfig) *OptionsHandler {
 
 	return &OptionsHandler{
 		allowedHosts: allowedHosts,
+		fetchSlots:   make(chan struct{}, maxConcurrentFetches),
+		limits:       make(map[[32]byte]*identityLimit),
+		cache:        make(map[string]cachedBody),
 		client: &http.Client{
-			Timeout: requestTimeout,
-			Transport: &http.Transport{
-				DialContext: safeDialContext,
-			},
+			Timeout:   requestTimeout,
+			Transport: safeTransport(),
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 10 || (len(via) > 0 && len(via[0].Header) > 0 && !strings.EqualFold(req.URL.Host, via[0].URL.Host)) {
 					return errors.New("parameter source redirect is not permitted")
@@ -117,16 +137,11 @@ func (h *OptionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sourceURL := r.URL.Query().Get("url")
+	if !h.allowIdentity(r) {
+		writeError(w, http.StatusTooManyRequests, "parameter source request limit exceeded")
+		return
+	}
 	configMapName := r.URL.Query().Get("configMapName")
-	if sourceURL != "" && configMapName != "" {
-		writeError(w, http.StatusBadRequest, "specify exactly one of url or configMapName")
-		return
-	}
-	if sourceURL == "" && configMapName == "" {
-		writeError(w, http.StatusBadRequest, "url or configMapName is required")
-		return
-	}
 	if err := h.authorizeSource(r); err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
 		return
@@ -135,7 +150,7 @@ func (h *OptionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveConfigMap(w, r, configMapName)
 		return
 	}
-	parsedURL, err := url.Parse(sourceURL)
+	parsedURL, err := url.Parse(r.URL.Query().Get("url"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid url")
 		return
@@ -145,6 +160,15 @@ func (h *OptionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cacheKey := ""
+	if r.URL.Query().Get("secretName") == "" {
+		q := r.URL.Query()
+		cacheKey = q.Get("templateKind") + "/" + q.Get("namespace") + "/" + q.Get("templateName") + "/" + q.Get("sourceUID") + "/" + q.Get("sourceVersion") + "/" + q.Get("parameterName") + "/" + parsedURL.String()
+		if body := h.cached(cacheKey); body != nil {
+			h.writeOptions(w, r, body)
+			return
+		}
+	}
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, parsedURL.String(), nil)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid url")
@@ -155,6 +179,13 @@ func (h *OptionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	select {
+	case h.fetchSlots <- struct{}{}:
+		defer func() { <-h.fetchSlots }()
+	default:
+		writeError(w, http.StatusTooManyRequests, "parameter source is busy")
+		return
+	}
 	response, err := h.client.Do(request)
 	if err != nil {
 		logging.RequireLoggerFromContext(r.Context()).WithError(err).Error(r.Context(), "failed to fetch parameter options")
@@ -177,7 +208,66 @@ func (h *OptionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.writeOptions(w, r, body)
+	if h.writeOptions(w, r, body) && cacheKey != "" {
+		h.storeCached(cacheKey, body)
+	}
+}
+
+func (h *OptionsHandler) allowIdentity(r *http.Request) bool {
+	credential := r.Header.Get("Authorization")
+	if credential == "" {
+		if cookie, err := r.Cookie("authorization"); err == nil {
+			credential = cookie.Value
+		}
+	}
+	key := sha256.Sum256([]byte(credential))
+	now := time.Now()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	entry := h.limits[key]
+	if entry == nil {
+		if len(h.limits) >= 1024 {
+			for key, existing := range h.limits {
+				if now.Sub(existing.lastUsed) > time.Minute {
+					delete(h.limits, key)
+				}
+			}
+			if len(h.limits) >= 1024 {
+				return false
+			}
+		}
+		entry = &identityLimit{limiter: rate.NewLimiter(rate.Limit(5), 10)}
+		h.limits[key] = entry
+	}
+	entry.lastUsed = now
+	return entry.limiter.Allow()
+}
+
+func (h *OptionsHandler) cached(key string) []byte {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	entry, ok := h.cache[key]
+	if ok && time.Now().Before(entry.expires) {
+		return entry.body
+	}
+	delete(h.cache, key)
+	return nil
+}
+
+func (h *OptionsHandler) storeCached(key string, body []byte) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.cache) >= 256 {
+		for key, entry := range h.cache {
+			if time.Now().After(entry.expires) {
+				delete(h.cache, key)
+			}
+		}
+		if len(h.cache) >= 256 {
+			return
+		}
+	}
+	h.cache[key] = cachedBody{body: body, expires: time.Now().Add(30 * time.Second)}
 }
 
 func (h *OptionsHandler) serveConfigMap(w http.ResponseWriter, r *http.Request, name string) {
@@ -216,20 +306,21 @@ func (h *OptionsHandler) serveConfigMap(w http.ResponseWriter, r *http.Request, 
 	h.writeOptions(w, r, []byte(data))
 }
 
-func (h *OptionsHandler) writeOptions(w http.ResponseWriter, r *http.Request, body []byte) {
+func (h *OptionsHandler) writeOptions(w http.ResponseWriter, r *http.Request, body []byte) bool {
 	var document any
 	if err := json.Unmarshal(body, &document); err != nil {
 		writeError(w, http.StatusBadGateway, "parameter source did not return valid JSON")
-		return
+		return false
 	}
 	items, err := mapOptions(document, r.URL.Query().Get("itemsPath"), r.URL.Query().Get("labelPath"), r.URL.Query().Get("valuePath"))
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
-		return
+		return false
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(optionsResponse{Items: items})
+	return true
 }
 
 func (h *OptionsHandler) addSecretHeader(request *http.Request, r *http.Request) error {
@@ -249,7 +340,8 @@ func (h *OptionsHandler) addSecretHeader(request *http.Request, r *http.Request)
 	}
 	secret, err := kube.CoreV1().Secrets(secretNamespace).Get(r.Context(), secretName, metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to read parameter source secret: %w", err)
+		logging.RequireLoggerFromContext(r.Context()).WithError(err).Warn(r.Context(), "failed to read parameter source secret")
+		return errors.New("reading the parameter source secret is not permitted")
 	}
 	value, ok := secret.Data[secretKey]
 	if !ok {
@@ -344,6 +436,14 @@ func validateURL(sourceURL *url.URL, allowedHosts map[string]struct{}) error {
 	return nil
 }
 
+func safeTransport() *http.Transport {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = safeDialContext
+	// An environment proxy would resolve and connect outside our private-network checks.
+	transport.Proxy = nil
+	return transport
+}
+
 func safeDialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
@@ -366,6 +466,9 @@ func safeDialContext(ctx context.Context, network, address string) (net.Conn, er
 }
 
 var blockedNetworks = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),
+	netip.MustParsePrefix("240.0.0.0/4"),
+	netip.MustParsePrefix("64:ff9b::/96"),  // NAT64 can route to private IPv4 addresses.
 	netip.MustParsePrefix("100.64.0.0/10"), // Shared address space, often routed inside clusters.
 	netip.MustParsePrefix("198.18.0.0/15"), // Benchmark networks.
 	netip.MustParsePrefix("192.0.0.0/24"),

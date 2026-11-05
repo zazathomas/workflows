@@ -357,8 +357,9 @@ func (as *argoServer) Run(ctx context.Context, port int, browserOpenFunc func(st
 	protocols.SetHTTP2(true)
 	protocols.SetUnencryptedHTTP2(true)
 	muxServer := &http.Server{
-		Handler:   handler,
-		Protocols: protocols,
+		Handler:           handler,
+		Protocols:         protocols,
+		ReadHeaderTimeout: 30 * time.Second,
 	}
 
 	wftmplStore.Run(ctx, as.stopCh)
@@ -514,6 +515,7 @@ func (as *argoServer) newHTTPServer(ctx context.Context, port int, artifactServe
 		log.WithError(err).Warn(ctx, "Ignoring invalid OIDC end-session endpoint")
 	}
 	mux.Handle(logout.LogoutEndpoint, logoutHandler)
+	mux.HandleFunc("/auth/token", as.tokenLoginHandler)
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		if os.Getenv("ARGO_SERVER_METRICS_AUTH") != "false" {
 			md := metadata.New(map[string]string{authcookie.AuthorizationMetadataKey: r.Header.Get("Authorization")})

@@ -202,13 +202,14 @@ export const WorkflowsService = {
 
     // Emits null when the stream opens, so callers can tell a transient failure
     // apart from a run that simply has not printed a marker yet.
-    watchRunActionLogs(namespace: string, name: string, marker: string, container: string): Observable<LogEntry | null> {
+    watchRunActionLogs(namespace: string, name: string, marker: string, container: string, podName?: string): Observable<LogEntry | null> {
         const grep = '^' + marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const params = new URLSearchParams({
             'logOptions.container': container,
             'logOptions.follow': 'true',
             grep
         });
+        if (podName) params.set('podName', podName);
         return requests.loadEventSource(uiUrl(`api/v1/workflows/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/log?${params}`)).pipe(
             map(line => (line ? (JSON.parse(line).result as LogEntry) : null)),
             filter(entry => entry === null || isString(entry?.content))

@@ -1,11 +1,8 @@
-import {fireEvent, render} from '@testing-library/react';
+import {fireEvent, render, waitFor} from '@testing-library/react';
 import {createMemoryHistory, History} from 'history';
 import React from 'react';
 
-import {setCookie} from '../shared/cookie';
 import {Login} from './login';
-
-jest.mock('../shared/cookie');
 
 describe('Login', () => {
     const LoginWithHistory = (history: History) => <Login history={history} match={null} location={history.location} />;
@@ -43,31 +40,33 @@ describe('Login', () => {
     });
 
     describe('token login', () => {
-        it('is reachable via the switch and submits the token', () => {
+        it('posts the token without writing it to a JavaScript cookie', async () => {
+            const fetchMock = jest.fn().mockResolvedValue({ok: false});
+            global.fetch = fetchMock;
             const {getByRole, getByText} = render(LoginWithHistory(createMemoryHistory()));
 
             expect(getByText('Single sign-on')).toBeInTheDocument();
             fireEvent.click(getByRole('button', {name: 'Use a service account token instead'}));
 
-            const signIn = getByRole('link', {name: /^Sign in$/});
+            const signIn = getByRole('button', {name: /^Sign in$/});
             fireEvent.change(getByRole('textbox'), {target: {value: 'test-token'}});
             fireEvent.click(signIn);
 
-            expect(signIn.getAttribute('href')).toBe('/');
-            expect(setCookie).toHaveBeenCalledWith('authorization', 'test-token');
+            await waitFor(() =>
+                expect(fetchMock).toHaveBeenCalledWith('/auth/token', {method: 'POST', headers: {'Content-Type': 'text/plain'}, body: 'test-token', credentials: 'same-origin'})
+            );
+            expect(getByRole('alert')).toHaveTextContent('Invalid token');
         });
     });
 
     describe('logout', () => {
-        it('links to the logout endpoint', () => {
-            const {getByRole} = render(LoginWithHistory(createMemoryHistory()));
-            expect(getByRole('link', {name: 'Sign out'}).getAttribute('href')).toBe('/auth/logout');
-        });
-
-        it('uses the base href', () => {
+        it('posts to the logout endpoint under the base href', async () => {
+            const fetchMock = jest.fn().mockResolvedValue({ok: false});
+            global.fetch = fetchMock;
             document.querySelector('base').setAttribute('href', '/test/');
             const {getByRole} = render(LoginWithHistory(createMemoryHistory()));
-            expect(getByRole('link', {name: 'Sign out'}).getAttribute('href')).toBe('/test/auth/logout');
+            fireEvent.click(getByRole('button', {name: 'Sign out'}));
+            await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/test/auth/logout', {method: 'POST', credentials: 'same-origin'}));
         });
     });
 });

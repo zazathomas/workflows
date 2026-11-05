@@ -35,21 +35,24 @@ interface Page<T> {
     metadata?: {continue?: string; resourceVersion?: string};
 }
 
-// Fetch every server page so title matches are not restricted to the loaded page.
-export async function fetchAllPages<T>(load: (pagination: Pagination) => Promise<Page<T>>): Promise<{items: T[]; metadata: NonNullable<Page<T>['metadata']>}> {
+// Bound title/label scans so a broad filter cannot download the entire cluster.
+export const MAX_SEARCH_PAGES = 10;
+export async function fetchAllPages<T>(load: (pagination: Pagination) => Promise<Page<T>>): Promise<{items: T[]; metadata: NonNullable<Page<T>['metadata']>; truncated: boolean}> {
     const items: T[] = [];
     const offsets = new Set<string>();
     let offset: string;
     let metadata: Page<T>['metadata'];
+    let pages = 0;
     do {
         const page = await load({limit: 200, offset});
+        pages++;
         if (!metadata) metadata = page.metadata;
         items.push(...(page.items || []));
         offset = page.metadata?.continue;
         if (offset && offsets.has(offset)) throw new Error('The server returned a repeated pagination token.');
         if (offset) offsets.add(offset);
-    } while (offset);
-    return {items, metadata: {...metadata, continue: undefined}};
+    } while (offset && pages < MAX_SEARCH_PAGES);
+    return {items, metadata: {...metadata, continue: undefined, ...(offset ? {scanTruncated: true} : {})}, truncated: !!offset};
 }
 
 export function searchPageOffset(value?: string): number {

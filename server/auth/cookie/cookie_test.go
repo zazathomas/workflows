@@ -56,7 +56,7 @@ func TestAuthCookiesUseExpectedAttributes(t *testing.T) {
 			assert.True(t, expires.Equal(setCookie.Expires))
 			assert.Equal(t, http.SameSiteStrictMode, setCookie.SameSite)
 			assert.Equal(t, secure, setCookie.Secure)
-			assert.False(t, setCookie.HttpOnly)
+			assert.True(t, setCookie.HttpOnly)
 
 			assert.Equal(t, AuthorizationCookieName, clearCookie.Name)
 			assert.Empty(t, clearCookie.Value)
@@ -66,7 +66,7 @@ func TestAuthCookiesUseExpectedAttributes(t *testing.T) {
 			assert.Equal(t, -1, clearCookie.MaxAge)
 			assert.Equal(t, http.SameSiteStrictMode, clearCookie.SameSite)
 			assert.Equal(t, secure, clearCookie.Secure)
-			assert.False(t, clearCookie.HttpOnly)
+			assert.True(t, clearCookie.HttpOnly)
 		})
 	}
 }

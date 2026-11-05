@@ -1,6 +1,7 @@
 package logout
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -31,15 +32,16 @@ func TestLogoutHandler(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
-			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, LogoutEndpoint, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, LogoutEndpoint, nil)
+			request.Header.Set("Origin", "http://example.com")
 
 			handler, err := NewHandler(tt.baseHRef, tt.redirectURL, tt.secure, tt.logoutURL, tt.clientID)
 			require.NoError(t, err)
 			handler.ServeHTTP(recorder, request)
 
 			response := recorder.Result()
-			assert.Equal(t, http.StatusSeeOther, response.StatusCode)
-			assert.Equal(t, tt.wantRedirect, response.Header.Get("Location"))
+			assert.Equal(t, http.StatusOK, response.StatusCode)
+			assert.JSONEq(t, `{"redirect":`+fmt.Sprintf("%q", tt.wantRedirect)+`}`, recorder.Body.String())
 			cookies := response.Cookies()
 			require.Len(t, cookies, len(tt.wantPaths))
 			for i, cookie := range cookies {
@@ -58,23 +60,23 @@ func TestLogoutHandlerRejectsUnsupportedMethod(t *testing.T) {
 	handler, err := NewHandler("/argo", "", false, "", "")
 	require.NoError(t, err)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, LogoutEndpoint, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, LogoutEndpoint, nil)
 	handler.ServeHTTP(recorder, request)
 	assert.Equal(t, http.StatusMethodNotAllowed, recorder.Code)
-	assert.Equal(t, http.MethodGet+", "+http.MethodHead, recorder.Header().Get("Allow"))
+	assert.Equal(t, http.MethodPost, recorder.Header().Get("Allow"))
 	assert.Empty(t, recorder.Header().Values("Set-Cookie"))
 	assert.Empty(t, recorder.Header().Get("Location"))
 }
 
-func TestLogoutHandlerAllowsHead(t *testing.T) {
+func TestLogoutHandlerRejectsCrossOrigin(t *testing.T) {
 	handler, err := NewHandler("/argo", "", false, "", "")
 	require.NoError(t, err)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodHead, LogoutEndpoint, nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, LogoutEndpoint, nil)
+	request.Header.Set("Origin", "https://attacker.example.com")
 	handler.ServeHTTP(recorder, request)
-	assert.Equal(t, http.StatusSeeOther, recorder.Code)
-	assert.Equal(t, "/argo/", recorder.Header().Get("Location"))
-	assert.Len(t, recorder.Result().Cookies(), 2)
+	assert.Equal(t, http.StatusForbidden, recorder.Code)
+	assert.Empty(t, recorder.Result().Cookies())
 }
 
 func TestConstructLogoutURL(t *testing.T) {

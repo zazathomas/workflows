@@ -3,7 +3,6 @@ import {useState} from 'react';
 import {RouteComponentProps} from 'react-router';
 
 import {uiUrl, uiUrlWithParams} from '../shared/base';
-import {setCookie} from '../shared/cookie';
 import {useCollectEvent} from '../shared/use-collect-event';
 
 import './login.scss';
@@ -24,6 +23,34 @@ export function Login({location}: RouteComponentProps<any>) {
     const redirect = new URLSearchParams({redirect: urlParams.get('redirect') ?? uiUrl('workflows')});
     const [token, setToken] = useState('');
     const [mode, setMode] = useState<'sso' | 'token'>('sso');
+    const [error, setError] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
+    async function signIn() {
+        setError('');
+        setSubmitting(true);
+        try {
+            const response = await fetch(uiUrl('auth/token'), {method: 'POST', headers: {'Content-Type': 'text/plain'}, body: token, credentials: 'same-origin'});
+            if (!response.ok) throw new Error('Invalid token or client authentication is unavailable.');
+            window.location.assign(uiUrl(''));
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Sign in failed.');
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    async function signOut() {
+        setError('');
+        try {
+            const response = await fetch(uiUrl('auth/logout'), {method: 'POST', credentials: 'same-origin'});
+            if (!response.ok) throw new Error('Sign out failed.');
+            const {redirect} = await response.json();
+            window.location.assign(redirect);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Sign out failed.');
+        }
+    }
     const [theme] = useState<'light' | 'dark'>(getInitialTheme);
     useCollectEvent('openedLogin');
 
@@ -59,17 +86,20 @@ export function Login({location}: RouteComponentProps<any>) {
                             Token
                         </label>
                         <textarea id='login-token' className='login__token-input' rows={4} value={token} onChange={event => setToken(event.target.value)} />
-                        <a className='argo-button argo-button--base login__submit' href={uiUrl('')} onClick={() => setCookie('authorization', token)}>
+                        <button type='button' className='argo-button argo-button--base login__submit' disabled={submitting || !token.trim()} onClick={signIn}>
                             <i className='fa fa-sign-in-alt' aria-hidden='true' /> Sign in
-                        </a>
+                        </button>
                         <button type='button' className='login__switch' onClick={() => setMode('sso')}>
                             Back to single sign-on
                         </button>
                     </section>
                 )}
 
+                {error && <p role='alert'>{error}</p>}
                 <div className='login__footer'>
-                    <a href={uiUrl('auth/logout')}>Sign out</a>
+                    <button type='button' className='login__switch' onClick={signOut}>
+                        Sign out
+                    </button>
                     <span aria-hidden='true'>·</span>
                     <a href='https://argo-workflows.readthedocs.io/en/latest/argo-server-auth-mode/' target='_blank' rel='noreferrer'>
                         Auth modes

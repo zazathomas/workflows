@@ -3,6 +3,7 @@ package parameter
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -21,6 +22,7 @@ import (
 	wfv1 "github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
 	wffake "github.com/argoproj/argo-workflows/v4/pkg/client/clientset/versioned/fake"
 	"github.com/argoproj/argo-workflows/v4/server/auth"
+	"github.com/argoproj/argo-workflows/v4/util/logging"
 )
 
 func TestParseHostsRejectsEntriesThatCannotMatch(t *testing.T) {
@@ -101,11 +103,11 @@ func TestSecretHeaderReturnsAuthenticatedClientRBACError(t *testing.T) {
 	handler := NewOptionsHandler(OptionsHandlerConfig{})
 	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://catalog.example.com?secretName=catalog&secretNamespace=argo&secretKey=token&header=Authorization", nil)
 	require.NoError(t, err)
-	request = request.WithContext(context.WithValue(request.Context(), auth.KubeKey, userClient))
+	request = request.WithContext(context.WithValue(logging.TestContext(t.Context()), auth.KubeKey, userClient))
 
 	err = handler.addSecretHeader(request, request)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "is forbidden")
+	assert.EqualError(t, err, "reading the parameter source secret is not permitted")
 }
 
 func TestConfigMapOptionsUseAuthenticatedClient(t *testing.T) {
@@ -150,8 +152,8 @@ func TestConfigMapOptionsFailClosed(t *testing.T) {
 		{name: "requires namespace and key", query: "configMapName=catalog", status: http.StatusBadRequest},
 		{name: "missing ConfigMap", query: "configMapName=missing&configMapKey=data&namespace=argo", client: fake.NewSimpleClientset(), status: http.StatusNotFound},
 		{name: "missing key", query: "configMapName=catalog&configMapKey=missing&namespace=argo", client: fake.NewSimpleClientset(&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "catalog", Namespace: "argo"}, Data: map[string]string{"data": "[]"}}), status: http.StatusNotFound},
-		{name: "both sources", query: "url=https%3A%2F%2Fexample.com&configMapName=catalog&configMapKey=data&namespace=argo", status: http.StatusBadRequest},
-		{name: "neither source", query: "namespace=argo", status: http.StatusBadRequest},
+		{name: "both sources", query: "url=https%3A%2F%2Fexample.com&configMapName=catalog&configMapKey=data&namespace=argo", status: http.StatusForbidden},
+		{name: "neither source", query: "namespace=argo", status: http.StatusForbidden},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -215,12 +217,12 @@ func TestURLSourceCannotChangeTargetOrSecretNamespace(t *testing.T) {
 		Spec: wfv1.WorkflowSpec{Arguments: wfv1.Arguments{Parameters: []wfv1.Parameter{{Name: "region"}}}},
 	})
 	handler := NewOptionsHandler(OptionsHandlerConfig{AllowedHosts: []string{"catalog.example.com", "evil.example.com"}})
-	base := "/?namespace=argo&templateKind=WorkflowTemplate&templateName=job&parameterName=region&url=https%3A%2F%2Fcatalog.example.com%2Fmy-team&parameters=%7B%22team%22%3A%22my-team%22%7D&secretName=token&secretNamespace=argo&secretKey=key&header=X-API-Key"
+	base := "/?namespace=argo&templateKind=WorkflowTemplate&templateName=job&parameterName=region&parameters=%7B%22team%22%3A%22my-team%22%7D&secretName=token&secretNamespace=argo&secretKey=key&header=X-API-Key"
 	for _, tt := range []struct{ name, query string }{
-		{"tampered URL", strings.Replace(base, "catalog.example.com", "evil.example.com", 1)},
+		{"tampered URL", base + "&url=https%3A%2F%2Fevil.example.com"},
 		{"tampered header", strings.Replace(base, "header=X-API-Key", "header=Authorization", 1)},
 		{"cross-namespace secret", strings.Replace(base, "secretNamespace=argo", "secretNamespace=other", 1)},
-		{"tampered parameter", strings.Replace(base, "my-team", "other-team", 1)},
+		{"tampered parameter URL", base + "&url=https%3A%2F%2Fcatalog.example.com%2Fother-team"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, tt.query, nil)
@@ -243,7 +245,7 @@ func TestOptionsHandlerFetchesDeclaredURLOnly(t *testing.T) {
 		}},
 		Spec: wfv1.WorkflowSpec{Arguments: wfv1.Arguments{Parameters: []wfv1.Parameter{{Name: "region"}}}},
 	})
-	base := "/?namespace=argo&templateKind=WorkflowTemplate&templateName=job&parameterName=region&url=https%3A%2F%2Fcatalog.example.com%2Fmy-team&parameters=%7B%22team%22%3A%22my-team%22%7D&itemsPath=items&labelPath=name&valuePath=id"
+	base := "/?namespace=argo&templateKind=WorkflowTemplate&templateName=job&parameterName=region&parameters=%7B%22team%22%3A%22my-team%22%7D&itemsPath=items&labelPath=name&valuePath=id"
 	for _, tt := range []struct {
 		name, body                     string
 		upstreamStatus, expectedStatus int
@@ -270,6 +272,64 @@ func TestOptionsHandlerFetchesDeclaredURLOnly(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIdentityRateLimitAndConcurrentFetchCap(t *testing.T) {
+	handler := NewOptionsHandler(OptionsHandlerConfig{AllowedHosts: []string{"catalog.example.com"}})
+	alice := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	alice.Header.Set("Authorization", "Bearer alice")
+	bob := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	bob.Header.Set("Authorization", "Bearer bob")
+	for range 10 {
+		assert.True(t, handler.allowIdentity(alice))
+	}
+	assert.False(t, handler.allowIdentity(alice))
+	assert.True(t, handler.allowIdentity(bob))
+
+	workflowClient := wffake.NewClientset(&wfv1.WorkflowTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "job", Namespace: "argo", Annotations: map[string]string{annotationKey: `{"region":{"url":"https://catalog.example.com/regions"}}`}},
+		Spec:       wfv1.WorkflowSpec{Arguments: wfv1.Arguments{Parameters: []wfv1.Parameter{{Name: "region"}}}},
+	})
+	for range maxConcurrentFetches {
+		handler.fetchSlots <- struct{}{}
+	}
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/?namespace=argo&templateKind=WorkflowTemplate&templateName=job&parameterName=region&parameters=%7B%7D", nil)
+	request = request.WithContext(context.WithValue(request.Context(), auth.WfKey, workflowClient))
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	assert.Equal(t, http.StatusTooManyRequests, recorder.Code)
+}
+
+func TestURLSourceEncodesSpecialParameterOnServer(t *testing.T) {
+	workflowClient := wffake.NewClientset(&wfv1.WorkflowTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "job", Namespace: "argo", Annotations: map[string]string{
+			annotationKey: `{"region":{"url":"https://catalog.example.com/team/{{team}}"}}`,
+		}},
+		Spec: wfv1.WorkflowSpec{Arguments: wfv1.Arguments{Parameters: []wfv1.Parameter{{Name: "region"}}}},
+	})
+	handler := NewOptionsHandler(OptionsHandlerConfig{AllowedHosts: []string{"catalog.example.com"}})
+	calls := 0
+	handler.client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		calls++
+		assert.Equal(t, "/team/team%20%28east%29", request.URL.EscapedPath())
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`[]`)), Header: http.Header{}}, nil
+	})
+	query := url.Values{"namespace": {"argo"}, "templateKind": {"WorkflowTemplate"}, "templateName": {"job"}, "parameterName": {"region"}, "parameters": {`{"team":"team (east)"}`}}
+	for i := 0; i < 2; i++ {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/?"+query.Encode(), nil)
+		request = request.WithContext(context.WithValue(request.Context(), auth.WfKey, workflowClient))
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		assert.Equal(t, http.StatusOK, recorder.Code)
+	}
+	assert.Equal(t, 1, calls, "the same template version and URL should be cached")
+}
+
+func TestBlockedNetworks(t *testing.T) {
+	for _, address := range []string{"0.1.2.3", "240.0.0.1", "64:ff9b::a00:1", "127.0.0.1"} {
+		assert.True(t, isPrivateIP(net.ParseIP(address)), address)
+	}
+	assert.False(t, isPrivateIP(net.ParseIP("8.8.8.8")))
 }
 
 func TestValidateURL(t *testing.T) {

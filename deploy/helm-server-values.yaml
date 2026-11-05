@@ -3,3 +3,8 @@ server:
     registry: ghcr.io
     repository: zazathomas/workflows
     tag: '4.1.6@sha256:e82c7a58710614cc574014947ffd2447a7866956a05376fcb7c551c6a5af3609'
+  # Use only with a trusted ingress that overwrites X-Forwarded-For.
+  # When combining with existing values, retain the existing extraEnv entries.
+  extraEnv:
+    - name: IP_KEY_FUNC_HEADERS
+      value: X-Forwarded-For

@@ -1,6 +1,7 @@
 package logout
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -78,13 +79,20 @@ func constructLogoutURL(logoutURL, clientID, redirectURL string) (string, error)
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.Header().Set("Allow", http.MethodGet+", "+http.MethodHead)
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	origin, err := url.Parse(r.Header.Get("Origin"))
+	if err != nil || origin.Host == "" || !strings.EqualFold(origin.Host, r.Host) || (origin.Scheme != "https" && origin.Scheme != "http") ||
+		(r.TLS != nil && origin.Scheme != "https") || (strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") && origin.Scheme != "https") {
+		http.Error(w, "same-origin request required", http.StatusForbidden)
 		return
 	}
 	for _, cookiePath := range h.cookiePaths {
 		authcookie.ClearAuthCookie(w, cookiePath, h.secure)
 	}
-	http.Redirect(w, r, h.redirectURL, http.StatusSeeOther)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"redirect": h.redirectURL})
 }

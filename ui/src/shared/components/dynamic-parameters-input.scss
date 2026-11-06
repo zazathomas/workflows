@@ -2,8 +2,9 @@
 
 .parameter-label {
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
 }
 
 .parameter-description {
@@ -14,40 +15,8 @@
     line-height: 1.4;
 }
 
-// A class that sets display beats the hidden attribute, so hide it explicitly.
-.parameter-description[hidden] {
-    display: none;
-}
-
-.parameter-description__toggle {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: #607086;
-    cursor: pointer;
-    line-height: 1;
-
-    &:hover,
-    &:focus-visible {
-        color: #006f8a;
-    }
-}
-
-.modern-theme-dark {
-    .parameter-description,
-    // A class that sets display beats the hidden attribute, so hide it explicitly.
-.parameter-description[hidden] {
-    display: none;
-}
-
-.parameter-description__toggle {
-        color: #a8b8ca;
-    }
-
-    .parameter-description__toggle:hover,
-    .parameter-description__toggle:focus-visible {
-        color: #9fe8ef;
-    }
+.modern-theme-dark .parameter-description {
+    color: #a8b8ca;
 }
 
 .parameter-error {

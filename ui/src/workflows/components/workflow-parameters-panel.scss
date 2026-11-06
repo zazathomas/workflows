@@ -1,0 +1,48 @@
+.workflow-parameter-value {
+    min-width: 0;
+
+    > summary {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        min-width: 0;
+        cursor: pointer;
+    }
+
+    &__preview {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__view,
+    &__hide {
+        flex-shrink: 0;
+        color: #006f8a;
+        text-decoration: underline;
+    }
+
+    &__hide,
+    &[open] &__view {
+        display: none;
+    }
+
+    &[open] &__hide {
+        display: inline;
+    }
+
+    &__full {
+        margin: 8px 0 0;
+        font: inherit;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+}
+
+.modern-theme-dark .workflow-parameter-value {
+    &__view,
+    &__hide {
+        color: #9fe8ef;
+    }
+}

@@ -1,4 +1,4 @@
-import {fireEvent, render, waitFor} from '@testing-library/react';
+import {render} from '@testing-library/react';
 import React from 'react';
 
 import {Parameter} from '../models';
@@ -8,32 +8,24 @@ import {ParametersInput} from './parameters-input';
 const described: Parameter = {name: 'region', value: 'eu-central-1', description: 'Where the run executes.'};
 
 describe('parameter descriptions', () => {
-    it('stays collapsed behind a labelled question mark until requested', () => {
-        const {getByRole, queryByText} = render(<ParametersInput parameters={[described]} onChange={() => undefined} />);
-
-        expect(queryByText('Where the run executes.')).not.toBeVisible();
-        const toggle = getByRole('button', {name: 'Show description for region'});
-        expect(toggle).toHaveAttribute('aria-expanded', 'false');
-
-        fireEvent.click(toggle);
-
-        expect(queryByText('Where the run executes.')).toBeVisible();
-        const hide = getByRole('button', {name: 'Hide description for region'});
-        expect(hide).toHaveAttribute('aria-expanded', 'true');
+    it('shows the description below a regular parameter', () => {
+        const {getByText, getByLabelText} = render(<ParametersInput parameters={[described]} onChange={() => undefined} />);
+        const description = getByText('Where the run executes.');
+        expect(description).toBeVisible();
+        expect(getByLabelText('region').getAttribute('aria-describedby')).toBe(description.id);
     });
 
-    it('offers the same control for parameters backed by a dynamic source', async () => {
-        const {getByRole, queryByText} = render(
+    it('shows the description for parameters backed by a dynamic source', () => {
+        const {getByText, getByLabelText} = render(
             <DynamicParametersInput namespace='argo' templateKind='WorkflowTemplate' templateName='sample' parameters={[described]} sources={{}} onChange={() => undefined} />
         );
-
-        await waitFor(() => expect(queryByText('Where the run executes.')).not.toBeVisible());
-        fireEvent.click(getByRole('button', {name: 'Show description for region'}));
-        expect(queryByText('Where the run executes.')).toBeVisible();
+        const description = getByText('Where the run executes.');
+        expect(description).toBeVisible();
+        expect(getByLabelText('region').getAttribute('aria-describedby')).toBe(description.id);
     });
 
     it('renders nothing when a parameter has no description', () => {
-        const {queryByRole} = render(<ParametersInput parameters={[{name: 'plain'}]} onChange={() => undefined} />);
-        expect(queryByRole('button', {name: /description for plain/})).not.toBeInTheDocument();
+        const {container} = render(<ParametersInput parameters={[{name: 'plain'}]} onChange={() => undefined} />);
+        expect(container.querySelector('.parameter-description')).not.toBeInTheDocument();
     });
 });

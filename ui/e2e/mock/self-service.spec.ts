@@ -236,15 +236,12 @@ test('run details drawer follows the dark theme', async ({page}) => {
     expect(background).toBe('rgb(31, 41, 55)');
 });
 
-test('the submit panel reveals parameter descriptions from a question mark', async ({page}) => {
+test('the submit panel shows parameter descriptions in the dark theme', async ({page}) => {
     await mockApi(page);
     await page.goto('/workflows/argo?sidePanel=submit-new-workflow&template=sample-job');
     const description = page.getByText('Text the job prints when it runs.');
-    await expect(description).toBeHidden();
-    await page.getByRole('button', {name: 'Show description for message'}).click();
     await expect(description).toBeVisible();
-    await page.getByRole('button', {name: 'Hide description for message'}).click();
-    await expect(description).toBeHidden();
+    await expect(page.getByRole('textbox', {name: 'message'})).toHaveAttribute('aria-describedby', 'parameter-message-0-description');
 });
 
 test('shows the workflows name on a run page', async ({page}) => {
@@ -784,6 +781,38 @@ test('overview places parameters before workflow details', async ({page}) => {
             'workflow-details-heading'
         )
     ).toBe(true);
+});
+
+test('overview truncates multiline parameters and reveals each full value on demand', async ({page}) => {
+    await mockApi(page);
+    const multiline = {
+        ...workflow,
+        spec: {
+            ...workflow.spec,
+            arguments: {
+                parameters: [
+                    {name: 'message', value: 'first line\nsecond line'},
+                    {name: 'config', value: 'another line\nmore config'}
+                ]
+            }
+        }
+    };
+    await page.route('**/api/v1/workflows/argo/sample-run', route => route.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify(multiline)}));
+    await page.goto('/workflows/argo/sample-run');
+    const parameters = page.getByRole('region', {name: 'Parameters'});
+    const message = parameters.locator('.white-box__details-row').filter({hasText: 'message'});
+    const config = parameters.locator('.white-box__details-row').filter({hasText: 'config'});
+    const preview = message.locator('.workflow-parameter-value__preview');
+    await expect(preview).toHaveText('first line…');
+    expect(await preview.evaluate(element => getComputedStyle(element).whiteSpace)).toBe('nowrap');
+    expect(await preview.evaluate(element => getComputedStyle(element).textOverflow)).toBe('ellipsis');
+    await expect(message.locator('pre')).toBeHidden();
+    await message.getByText('View full value').click();
+    await expect(message.locator('pre')).toBeVisible();
+    await expect(message.locator('pre')).toHaveText('first line\nsecond line');
+    await expect(config.locator('pre')).toBeHidden();
+    await message.getByText('Hide full value').click();
+    await expect(message.locator('pre')).toBeHidden();
 });
 
 test('overview displays a non-empty workflow status message', async ({page}) => {

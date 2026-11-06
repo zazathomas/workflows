@@ -46,7 +46,7 @@ export function ParametersInput(props: ParametersInputProps) {
                                 {parameter.name}
                                 {required && <span> (required)</span>}
                             </label>
-                            <ParameterDescription id={descriptionId} name={parameter.name} description={parameter.description} />
+                            <ParameterDescription id={descriptionId} description={parameter.description} />
                         </div>
                         {parameter.enum ? (
                             <Select

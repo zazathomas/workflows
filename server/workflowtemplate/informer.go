@@ -11,6 +11,7 @@ import (
 
 	wfextvv1alpha1 "github.com/argoproj/argo-workflows/v4/pkg/client/informers/externalversions/workflow/v1alpha1"
 	"github.com/argoproj/argo-workflows/v4/server/types"
+	informerutil "github.com/argoproj/argo-workflows/v4/util/informer"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
 	"github.com/argoproj/argo-workflows/v4/workflow/controller/informer"
 	"github.com/argoproj/argo-workflows/v4/workflow/templateresolution"
@@ -36,6 +37,10 @@ func NewInformer(restConfig *rest.Config, managedNamespace string) (*Informer, e
 		dynamicInterface,
 		workflowTemplateResyncPeriod,
 		managedNamespace)
+	// The controller strips managedFields; argo-server serves templates to the
+	// UI, whose "Changes" tab reads the audit fields, so keep those instead.
+	//nolint:errcheck // the informer has not started
+	informer.Informer().SetTransform(informerutil.TrimManagedFields)
 	return &Informer{
 		informer:         informer,
 		managedNamespace: managedNamespace,

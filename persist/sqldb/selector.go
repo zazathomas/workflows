@@ -1,6 +1,7 @@
 package sqldb
 
 import (
+	"strings"
 	"time"
 
 	"github.com/upper/db/v4"
@@ -8,6 +9,34 @@ import (
 	"github.com/argoproj/argo-workflows/v4/server/utils"
 	"github.com/argoproj/argo-workflows/v4/util/sqldb"
 )
+
+// runSubstringClauses matches literal substrings. Search values are bound as
+// SQL parameters; LIKE wildcard characters are escaped on every dialect.
+func runSubstringClauses(dialect sqldb.DBType, table, labelTable string, options utils.ListOptions) []*db.RawExpr {
+	var clauses []*db.RawExpr
+	like := func(s string) string {
+		return "%" + strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(strings.ToLower(s)) + "%"
+	}
+	if options.NameTitleContains != "" {
+		title := `json_extract(workflow, '$.metadata.annotations."workflows.argoproj.io/title"')`
+		switch dialect {
+		case sqldb.Postgres:
+			title = "(workflow->'metadata'->'annotations'->>'workflows.argoproj.io/title')"
+		case sqldb.MySQL:
+			title = "JSON_UNQUOTE(" + title + ")"
+		}
+		term := like(options.NameTitleContains)
+		clauses = append(clauses, db.Raw("("+`lower(name) like ? escape '!' or lower(`+title+`) like ? escape '!')`, term, term))
+	}
+	if options.LabelContains != "" {
+		pair := "labels.name || '=' || labels.value"
+		if dialect == sqldb.MySQL {
+			pair = "concat(labels.name, '=', labels.value)"
+		}
+		clauses = append(clauses, db.Raw("exists (select 1 from "+labelTable+" as labels where labels.uid = "+table+".uid and lower("+pair+") like ? escape '!')", like(options.LabelContains)))
+	}
+	return clauses
+}
 
 func BuildArchivedWorkflowSelector(selector db.Selector, tableName, labelTableName string, t sqldb.DBType, options utils.ListOptions, count bool) (db.Selector, error) {
 	if options.NamespaceFilter == "NotEquals" {
@@ -42,6 +71,9 @@ func BuildArchivedWorkflowSelector(selector db.Selector, tableName, labelTableNa
 		}
 	}
 
+	for _, clause := range runSubstringClauses(t, tableName, labelTableName, options) {
+		selector = selector.And(clause)
+	}
 	selector, err := labelsClause(selector, t, options.LabelRequirements, tableName, labelTableName, true)
 	if err != nil {
 		return nil, err
@@ -56,13 +88,13 @@ func BuildArchivedWorkflowSelector(selector db.Selector, tableName, labelTableNa
 		options.Offset = -1
 	}
 	return selector.
-		OrderBy("-startedat").
+		OrderBy("-startedat", "-uid").
 		Limit(options.Limit).
 		Offset(options.Offset), nil
 }
 
 func BuildWorkflowSelector(in string, inArgs []any, tableName, labelTableName string, t sqldb.DBType, options utils.ListOptions, count bool) (out string, outArgs []any, err error) {
-	var clauses []*db.RawExpr
+	clauses := runSubstringClauses(t, tableName, labelTableName, options)
 	if options.Namespace != "" {
 		if options.NamespaceFilter == "NotEquals" {
 			clauses = append(clauses, db.Raw("namespace != ?", options.Namespace))
@@ -123,13 +155,11 @@ func BuildWorkflowSelector(in string, inArgs []any, tableName, labelTableName st
 		return out, outArgs, nil
 	}
 	if options.StartedAtAscending {
-		out += " order by startedat asc"
+		out += " order by startedat asc, uid asc"
 	} else {
-		out += " order by startedat desc"
+		out += " order by startedat desc, uid desc"
 	}
 
-	// If we were passed 0 as the limit, then we should load all available archived workflows
-	// to match the behavior of the `List` operations in the Kubernetes API
 	if options.Limit == 0 {
 		options.Limit = -1
 		options.Offset = -1

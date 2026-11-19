@@ -1,14 +1,20 @@
 .drop-down-button {
-  display: inline-block;
+    display: inline-block;
 
-  .items {
-    position: absolute; // hover at the bottom left of the containing element
-    z-index: 1; // must above other elements
-    box-shadow: 1px 1px 1px 1px; // add a small shadow to lift it off the page a tiny amount
+    .items {
+        position: absolute;
+        z-index: 20;
+        padding: var(--space-1);
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+        box-shadow: var(--shadow-raised);
 
-    .item {
-      border-radius: 0; // remove the 24px button radius which looks odd on a menu
-      width: 100%
+        .item {
+            // Menu rows keep the square-ish radius; the button's pill radius
+            // does not belong on a stacked menu.
+            width: 100%;
+            border-radius: var(--radius-md);
+        }
     }
-  }
 }

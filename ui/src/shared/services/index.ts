@@ -1,5 +1,7 @@
+import {ApprovalsService} from './approvals-service';
 import {ClusterWorkflowTemplateService} from './cluster-workflow-template-service';
 import {CronWorkflowService} from './cron-workflow-service';
+import {EnvironmentService} from './environment-service';
 import {EventService} from './event-service';
 import {EventSourceService} from './event-source-service';
 import {InfoService} from './info-service';
@@ -9,8 +11,10 @@ import {SensorService} from './sensor-service';
 import {WorkflowTemplateService} from './workflow-template-service';
 import {WorkflowsService} from './workflows-service';
 
+
 interface Services {
     info: typeof InfoService;
+    approvals: typeof ApprovalsService;
     sensor: typeof SensorService;
     event: typeof EventService;
     eventSource: typeof EventSourceService;
@@ -20,10 +24,12 @@ interface Services {
     cronWorkflows: typeof CronWorkflowService;
     parameterOptions: typeof ParameterOptionsService;
     runActions: typeof RunActionService;
+    environment: typeof EnvironmentService;
 }
 
 export const services: Services = {
     info: InfoService,
+    approvals: ApprovalsService,
     workflows: WorkflowsService,
     workflowTemplate: WorkflowTemplateService,
     clusterWorkflowTemplate: ClusterWorkflowTemplateService,
@@ -32,5 +38,6 @@ export const services: Services = {
     sensor: SensorService,
     cronWorkflows: CronWorkflowService,
     parameterOptions: ParameterOptionsService,
-    runActions: RunActionService
+    runActions: RunActionService,
+    environment: EnvironmentService
 };

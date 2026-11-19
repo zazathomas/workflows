@@ -1,6 +1,7 @@
 import {Ticker} from 'argo-ui/src/components/ticker';
 import * as React from 'react';
 
+import {ANNOTATION_RUN_MESSAGE} from '../../shared/annotations';
 import {uiUrl} from '../../shared/base';
 import {DurationPanel} from '../../shared/components/duration-panel';
 import {Phase} from '../../shared/components/phase';
@@ -8,13 +9,45 @@ import {Timestamp} from '../../shared/components/timestamp';
 import {ConditionsPanel} from '../../shared/conditions-panel';
 import {Consumer} from '../../shared/context';
 import {wfDuration} from '../../shared/duration';
-import {labels, NODE_PHASE, Workflow} from '../../shared/models';
+import {labels, NODE_PHASE, SynchronizationStatus, Workflow} from '../../shared/models';
 import {ResourcesDuration} from '../../shared/resources-duration';
 import {TIMESTAMP_KEYS} from '../../shared/use-timestamp';
+import {NodeBoxScore, NowRunningNodes} from './node-box-score';
 import {WorkflowCreatorInfo} from './workflow-creator-info/workflow-creator-info';
+import {WorkflowElapsedBar} from './workflow-elapsed-bar';
 import {WorkflowFrom} from './workflow-from';
 import {WorkflowLabels} from './workflow-labels/workflow-labels';
 import {WorkflowParametersPanel} from './workflow-parameters-panel';
+
+/** Steps waiting on a semaphore or mutex lock (queue visibility). */
+export function QueueSection({workflow}: {workflow: Workflow}) {
+    const synchronization: SynchronizationStatus | undefined = workflow.status?.synchronization;
+    const waiting: [string, string[]][] = Object.entries(synchronization?.semaphore?.waiting || {}).concat(Object.entries(synchronization?.mutex?.waiting || {}));
+    if (waiting.length === 0) {
+        return null;
+    }
+    return (
+        <div className='white-box workflow-summary__queue'>
+            <h5>
+                <i className='fa fa-hourglass-half' aria-hidden='true' /> Queue
+            </h5>
+            <p>The following steps are waiting for a lock to become available:</p>
+            <ul>
+                {waiting.map(([nodeId, holders]) => {
+                    const node = workflow.status.nodes?.[nodeId];
+                    return (
+                        <li key={nodeId}>
+                            <a href={uiUrl(`workflows/${workflow.metadata.namespace}/${workflow.metadata.name}?tab=workflow&nodeId=${nodeId}`)}>
+                                {node?.displayName || node?.name || nodeId}
+                            </a>{' '}
+                            — {holders.length} {holders.length === 1 ? 'holder' : 'holders'} ahead
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
+    );
+}
 
 export const WorkflowSummaryPanel = (props: {workflow: Workflow}) => (
     <Ticker disabled={props.workflow && props.workflow.status.phase !== NODE_PHASE.RUNNING}>
@@ -22,6 +55,9 @@ export const WorkflowSummaryPanel = (props: {workflow: Workflow}) => (
             const attributes: {title: string; value: any}[] = [
                 {title: 'Status', value: <Phase value={props.workflow.status.phase} />},
                 ...(props.workflow.status.message?.trim() ? [{title: 'Message', value: props.workflow.status.message}] : []),
+                ...(props.workflow.metadata.annotations?.[ANNOTATION_RUN_MESSAGE]?.trim()
+                    ? [{title: 'Run message', value: <em>{props.workflow.metadata.annotations[ANNOTATION_RUN_MESSAGE]}</em>}]
+                    : []),
                 {title: 'Name', value: props.workflow.metadata.name},
                 {title: 'Namespace', value: props.workflow.metadata.namespace},
                 {title: 'Started', value: <Timestamp date={props.workflow.status.startedAt} timestampKey={TIMESTAMP_KEYS.WORKFLOW_SUMMARY_PANEL_START} />},
@@ -87,6 +123,9 @@ export const WorkflowSummaryPanel = (props: {workflow: Workflow}) => (
             }
             return (
                 <>
+                    <NodeBoxScore workflow={props.workflow} />
+                    <WorkflowElapsedBar workflow={props.workflow} />
+                    <NowRunningNodes workflow={props.workflow} />
                     <div className='white-box'>
                         <div className='white-box__details'>
                             {attributes.map(attr => (
@@ -97,6 +136,7 @@ export const WorkflowSummaryPanel = (props: {workflow: Workflow}) => (
                             ))}
                         </div>
                     </div>
+                    <QueueSection workflow={props.workflow} />
                     {props.workflow.spec.arguments?.parameters && (
                         <section className='workflow-details__section' aria-labelledby='workflow-parameters-heading'>
                             <h5 id='workflow-parameters-heading'>Parameters</h5>

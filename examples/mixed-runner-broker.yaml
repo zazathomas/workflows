@@ -1,0 +1,62 @@
+# Requires the stock runner executor plugin and a broker for builds/build.
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: mixed-runner-
+  namespace: builds
+spec:
+  entrypoint: mixed
+  serviceAccountName: runner-workflow
+  activeDeadlineSeconds: 300
+  templates:
+    - name: mixed
+      steps:
+        - - name: prepare
+            template: prepare
+        - - name: remote
+            template: remote
+            arguments:
+              parameters:
+                - name: message
+                  value: "{{steps.prepare.outputs.result}}"
+        - - name: check
+            template: check
+            arguments:
+              artifacts:
+                - name: report
+                  from: "{{steps.remote.outputs.artifacts.report}}"
+    - name: prepare
+      container:
+        image: docker.io/library/busybox@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+        command: [sh, -ec]
+        args: ['printf hello']
+    - name: remote
+      inputs:
+        parameters:
+          - name: message
+        artifacts:
+          - name: source
+            path: /work/source
+            raw:
+              data: "{{inputs.parameters.message}}"
+      plugin:
+        runner:
+          node: "{{node.name}}"
+          pool: build
+          image: docker.io/library/busybox@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+          timeout: 2m
+          command: [sh, -ec]
+          args: ['tr a-z A-Z < /work/source > /work/report']
+      outputs:
+        artifacts:
+          - name: report
+            path: /work/report
+    - name: check
+      inputs:
+        artifacts:
+          - name: report
+            path: /tmp/report
+      container:
+        image: docker.io/library/busybox@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+        command: [sh, -ec]
+        args: ['test "$(cat /tmp/report)" = HELLO']

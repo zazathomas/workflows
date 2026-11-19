@@ -4,25 +4,20 @@ Report a suspected vulnerability through this repository's private GitHub Securi
 Do not report fork-only defects to the upstream Argo Workflows project.
 The repository owner must enable private vulnerability reporting before publishing the image.
 
-The upstream server exposes workflow creation and artifact operations and inherits the security model of the upstream controller.
-Use client auth mode with caller-scoped Kubernetes RBAC unless you have a documented reason to use SSO with RBAC.
-Do not use server auth mode for an untrusted audience: it makes the server's service-account permissions available to clients.
-The fork's parameter-options endpoint is disabled in server auth mode and in SSO without RBAC.
+The image keeps the upstream server's security model for workflow creation and artifact operations, and inherits the upstream controller's model for everything it runs.
+Use client auth mode with caller-scoped RBAC unless you have a documented reason for SSO with RBAC; never offer server auth mode to an untrusted audience, because it hands clients the server's service-account permissions.
+For controller, executor, workflow pod, artifact store, and database hardening, follow [upstream's security guide](https://argo-workflows.readthedocs.io/en/latest/security/).
 
-The parameter endpoint checks that the caller can read the WorkflowTemplate or ClusterWorkflowTemplate and that its annotation declares the requested source.
-ConfigMap and Secret reads use the authenticated request's Kubernetes identity.
-Only hostnames in the server-only `ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS` environment variable are allowed; network dialing rejects private and loopback addresses, and response size and time are limited.
-Still use a network policy to restrict server egress to the configured hosts, keep the allowlist short, and monitor outbound requests.
-Users who can edit a template's annotation can direct source requests to allowlisted hosts; grant that permission deliberately.
-Secret headers cannot reference another namespace.
-Avoid putting sensitive parameter values in a source URL because the endpoint uses GET.
+## Fork extensions
 
-Run actions read pod logs and open external links in the user's browser.
-The separate `ARGO_SERVER_RUN_ACTION_ALLOW_HOSTS` policy restricts clickable links to approved exact hostnames; keep the list short and verify the destination before entering a device code.
-Only grant log access to users who should see run output, and do not put access tokens in run-action events.
-See [run actions](run-actions.md) for the event format and lifecycle.
+- **Parameter sources** ([guide](parameter-sources.md)): the endpoint requires the caller to be able to read the template and declares the requested source in its annotation. ConfigMap and Secret reads use the caller's identity, Secret headers cannot cross namespaces, and HTTPS fetches are limited to `ARGO_SERVER_PARAMETER_SOURCE_ALLOW_HOSTS` with private and loopback targets refused. Keep the list short, add a network policy for server egress, and treat template-annotation edit rights as a grant to direct requests.
+- **Environment viewer** ([guide](environment-viewer.md)): lists ConfigMaps and Secrets with the caller's RBAC and never returns values. Key names and sizes are still metadata, so grant `list` on Secrets only to people who may see them.
+- **Run actions** ([guide](run-actions.md)): reads pod logs and opens links in the browser. `ARGO_SERVER_RUN_ACTION_ALLOW_HOSTS` restricts clickable destinations, and the allowlist checks the destination, not who issued a device code: verify the destination before entering one. Never put access tokens in run-action events, and grant log access only to people who should see run output.
+- **Approvals** ([guide](approvals.md)): grant the dedicated decide permission instead of workflow writes, and apply the opt-in admission policy and restrictive RBAC before relying on approvals as a release gate.
+- **Notifications** ([guide](notifications.md)): server-side egress. Whoever can edit a namespace's `argo-notifications` ConfigMap chooses destinations, and whoever can edit a Job's annotations opts runs into them. Webhook and SMTP hosts must be in `ARGO_SERVER_NOTIFICATION_ALLOW_HOSTS` (an empty list fails closed), and credential Secrets must carry `notifications.argoproj.io/allowed: "true"`. There is no private-network block, so listing an internal host deliberately lets the server reach it.
+- **Remote runners** ([broker deployment](runner-broker.md), [threat model](runner-threat-model.md)): restrict task-set status, plugin configuration, and plugin credentials to trusted identities. The broker and remote workers hold no Kubernetes credentials. Use dedicated or disposable workers for mutually untrusted workloads.
 
-Pin releases by image digest and verify their keyless signature and SBOM attestation with Cosign.
-Protect release Git tags and the `production` GitHub Actions environment; only approved releases should receive package-write and OIDC permissions.
-Restrict access to the GitHub repository and GHCR package, and review vulnerability-scan results before deploying.
-For controller, executor, workflow pod, artifact-store, and database hardening, follow [upstream's security guide](https://argo-workflows.readthedocs.io/en/latest/security/).
+## Supply chain
+
+Pin releases by image digest and verify their keyless signature and SBOM attestation with Cosign ([release guide](release.md#verify-a-release)).
+Protect release Git tags and the `production` environment so only approved releases receive package-write and OIDC permissions, and restrict access to the repository and the GHCR package.

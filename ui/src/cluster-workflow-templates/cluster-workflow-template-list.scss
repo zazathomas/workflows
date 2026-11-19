@@ -3,7 +3,7 @@
 .argo-table-list {
   margin: 1em;
   &__row:hover {
-    box-shadow: 1px 2px 3px rgba($argo-color-gray-9, .1), 0 0 0 1px rgba($argo-color-teal-5, .5);
+    border-color: var(--border-strong);
   }
 }
 

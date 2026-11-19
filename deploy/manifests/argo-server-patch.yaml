@@ -23,3 +23,4 @@ spec:
             # List approved identity-provider hosts to enable Run action links.
             - name: ARGO_SERVER_RUN_ACTION_ALLOW_HOSTS
               value: ''
+            # Configure notification delivery on the separate fork worker.

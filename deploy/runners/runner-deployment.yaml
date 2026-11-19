@@ -1,0 +1,60 @@
+# Kubernetes Deployment for the containerised runner (docs/runners.md).
+#
+# The example runs the rootless DinD flavour. The pod needs host kernel
+# support for unprivileged user namespaces; on Ubuntu 23.10+ kernels add the
+# host-side AppArmor profile for rootlesskit documented in docs/runners.md,
+# or switch to Sysbox (DIND_MODE=sysbox with the sysbox-runc runtime class).
+#
+# Workers talk only to the broker over HTTPS and hold no Kubernetes credentials.
+# Mint a token with argo-runner-broker mint and enroll the worker before running
+# it. The example emptyDir preserves credentials only for the life of the Pod.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argo-runner
+  labels:
+    app: argo-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: argo-runner
+  template:
+    metadata:
+      labels:
+        app: argo-runner
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: runner
+          image: ghcr.io/zazathomas/workflows-runner:latest # replace with a release digest
+          args: [run, --policy, /etc/argo-runner/policy.json]
+          env:
+            - name: DIND_MODE
+              value: rootless
+            - name: ARGO_RUNNER_SERVER
+              value: https://runner-broker.example.com
+          volumeMounts:
+            - name: runner-state
+              mountPath: /home/rootless/argo-runner
+            - name: policy
+              mountPath: /etc/argo-runner/policy.json
+              subPath: policy.json
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+              ephemeral-storage: 1Gi
+            limits:
+              memory: 2Gi
+              ephemeral-storage: 8Gi
+      volumes:
+        - name: runner-state
+          emptyDir: {}
+        - name: policy
+          configMap:
+            # Ship the operator policy as a ConfigMap (allowed registries,
+            # resource ceilings, egress); see docs/runners.md.
+            name: argo-runner-policy

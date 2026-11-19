@@ -4,11 +4,22 @@ Server and UI fork of Argo Workflows, a Kubernetes-native workflow engine: workf
 
 Per-directory guidance lives in `ui/AGENTS.md` and `docs/AGENTS.md`. Read the relevant one before working in those areas.
 
+## Environment: containers, never the host
+
+Never install toolchains, compilers, language runtimes, package managers, browsers, or any other binary on the host machine (this includes `go install`, `npm install -g`, `brew install`, and similar). Run every build, test, lint, and dev server inside a Docker container, preferring images already pinned in the repo:
+
+- Go: the `golang:...-alpine` image pinned in `Dockerfile`, with the repository bind-mounted and the Go module cache kept in a named volume.
+- UI (Node/Yarn/webpack/Jest): `node:24-alpine`, with `ui/node_modules` kept in a docker volume so the install is cached across runs; exact commands in `ui/AGENTS.md`.
+- Browser tests: the Playwright image whose version matches `@playwright/test` in `ui/yarn.lock` (currently `mcr.microsoft.com/playwright:v1.64.0`).
+- Containers that talk to each other (UI dev server, Playwright, a mock server) go on a shared docker network; the webpack dev server needs `--host 0.0.0.0 --allowed-hosts all` when driven from another container.
+
+If something genuinely cannot run in a container, stop and ask before touching the host.
+
 ## Commands
 
 - Build: `make cli` (`dist/argo`, which includes `argo server`).
 - Server and API tests: `make compatibility` checks the API contract for every release in `hack/upstream-versions.json` and runs focused packages. `make test-hack` covers the compatibility tooling. For direct local tests, set `GOFLAGS='-mod=mod -tags=kubernetes_protomessage_one_more_release'` if an ignored `vendor/` directory is present.
-- Mock-backed UI tests: start the UI development server, then run `yarn --cwd ui playwright test -c playwright.mock.config.ts`.
+- Mock-backed UI tests: `make test-ui-e2e` (Playwright starts the UI development server itself; set `ARGO_UI_BASE_URL` to use a server you started, e.g. in another container).
 - Live testing requires an existing Argo Workflows installation. The upstream Tilt stack and its controller/executor build targets are not supported by this fork; see `docs/running-locally.md`.
 - Lint: `make lint` (UI ESLint and TypeScript checks). Documentation lives as Markdown in `docs/`; no docs site is published.
 - Upstream releases: `make upstream-versions` fetches the tags in `hack/upstream-versions.json`; `make upstream-contract` then compares the API contract for each of them.
@@ -34,7 +45,7 @@ Cross-cutting invariants: the executor never writes the Workflow object — outp
 
 ### Server (`server/`)
 
-`server/apiserver` serves gRPC and grpc-gateway HTTP on one port; artifact up/download endpoints and the embedded UI (`ui/embed.go`) are mounted directly. Auth (`server/auth`) is chosen per-request from the Authorization header: `client` (caller's k8s token, their RBAC), `server` (server's service account), `sso` (OIDC claims mapped to service accounts via RBAC labels); gatekeeper interceptors stash per-request clients in ctx (`auth.GetWfClient(ctx)`). Workflow archive lives in `server/workflowarchive` over `persist/sqldb` (Postgres/MySQL).
+`server/apiserver` serves gRPC and grpc-gateway HTTP on one port; artifact up/download endpoints and the embedded UI (`ui/embed.go`) are mounted directly. Auth (`server/auth`) is chosen per-request from the Authorization header: `client` (caller's k8s token, their RBAC), `server` (server's service account), `sso` (OIDC claims mapped to service accounts via RBAC labels); gatekeeper interceptors stash per-request clients in ctx (`auth.GetWfClient(ctx)`). Workflow archive lives in `server/workflowarchive` over `persist/sqldb` (Postgres/MySQL). Remote runners use the standalone PostgreSQL `runner/broker` and the stock Argo executor plugin (`docs/runner-broker.md`).
 
 `pkg/apiclient` gives every CLI command four transports behind one interface: argo-server gRPC, HTTP1 fallback, offline (lint without a cluster), and direct-kube (no server — service logic runs in-process against the k8s API).
 

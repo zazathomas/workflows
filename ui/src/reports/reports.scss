@@ -1,19 +1,19 @@
 .reports-chart-card {
     position: relative;
     overflow: hidden;
-    margin-bottom: 24px;
-    border: 1px solid #dce6ec;
-    border-radius: 16px;
-    background: linear-gradient(145deg, #ffffff 0%, #f7fbfc 100%);
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    margin-bottom: var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
 
     &::before {
         position: absolute;
         top: 0;
         right: 0;
         left: 0;
-        height: 4px;
-        background: linear-gradient(90deg, #14b8a6, #3b82f6, #8b5cf6);
+        height: 3px;
+        background: var(--accent-strong);
         content: '';
     }
 
@@ -21,49 +21,50 @@
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        gap: 20px;
-        padding: 24px 26px 12px;
+        gap: var(--space-5);
+        padding: var(--space-5) var(--space-5) var(--space-3);
     }
 
     &__eyebrow {
-        margin-bottom: 5px;
-        color: #0f766e;
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.12em;
+        margin-bottom: var(--space-1);
+        color: var(--accent);
+        font-size: var(--text-2xs);
+        font-weight: 600;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
     }
 
     h2 {
         margin: 0;
-        color: #172b4d;
-        font-size: 21px;
-        font-weight: 700;
+        color: var(--text-strong);
+        font-size: var(--text-xl);
+        font-weight: 600;
+        letter-spacing: -0.01em;
     }
 
     p {
         max-width: 600px;
-        margin: 5px 0 0;
-        color: #64748b;
-        font-size: 13px;
+        margin: var(--space-1) 0 0;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
     }
 
     &__count {
         flex: 0 0 auto;
-        padding: 7px 11px;
-        border: 1px solid #c7d8df;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.8);
-        color: #52606d;
-        font-size: 12px;
-        font-weight: 700;
+        padding: 5px 12px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-pill);
+        background: var(--surface-sunken);
+        color: var(--text-secondary);
+        font-size: var(--text-xs);
+        font-weight: 600;
         white-space: nowrap;
     }
 
     &__body {
         position: relative;
         min-height: 330px;
-        padding: 8px 20px 20px;
+        padding: var(--space-2) var(--space-5) var(--space-5);
     }
 
     &__body > div,
@@ -73,40 +74,44 @@
     }
 
     &__data {
-        margin: 0 20px 20px;
-        border-top: 1px solid #dce6ec;
-        color: #334155;
+        margin: 0 var(--space-5) var(--space-5);
+        border-top: 1px solid var(--border);
+        color: var(--text-primary);
 
         summary {
             width: fit-content;
-            padding: 12px 0;
-            color: #006f8a;
+            padding: var(--space-3) 0;
+            color: var(--accent);
             cursor: pointer;
-            font-size: 13px;
-            font-weight: 700;
+            font-size: var(--text-sm);
+            font-weight: 600;
         }
     }
 
     &__table-wrapper {
         overflow-x: auto;
-        padding-bottom: 8px;
+        padding-bottom: var(--space-2);
 
         table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 13px;
+            font-size: var(--text-sm);
         }
 
         th,
         td {
             padding: 9px 10px;
-            border-bottom: 1px solid #e2e8f0;
+            border-bottom: 1px solid var(--border);
             text-align: left;
         }
 
         thead th {
-            background: #edf4f7;
-            color: #456170;
+            background: var(--surface-sunken);
+            color: var(--text-secondary);
+            font-size: var(--text-2xs);
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
         }
     }
 
@@ -116,79 +121,23 @@
         align-items: center;
         justify-content: center;
         flex-direction: column;
-        gap: 8px;
-        color: #64748b;
+        gap: var(--space-2);
+        color: var(--text-muted);
         text-align: center;
 
         i {
-            margin-bottom: 4px;
-            color: #8b5cf6;
-            font-size: 30px;
+            margin-bottom: var(--space-1);
+            color: var(--accent);
+            font-size: var(--text-2xl);
         }
 
         strong {
-            color: #334155;
-            font-size: 15px;
+            color: var(--text-primary);
+            font-size: var(--text-md);
         }
 
         span {
-            font-size: 13px;
-        }
-    }
-}
-
-.theme-dark .reports-chart-card {
-    border-color: #334155;
-    background: linear-gradient(145deg, #1f2937 0%, #172033 100%);
-    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.25);
-
-    &__eyebrow {
-        color: #5eead4;
-    }
-
-    h2 {
-        color: #e0f2fe;
-    }
-
-    p,
-    &__empty {
-        color: #a8b8ca;
-    }
-
-    &__count {
-        border-color: #475569;
-        background: rgba(15, 23, 42, 0.55);
-        color: #cbd5e1;
-    }
-
-    &__data {
-        border-top-color: #334155;
-        color: #e5edf5;
-
-        summary {
-            color: #9fe8ef;
-        }
-    }
-
-    &__table-wrapper {
-        th,
-        td {
-            border-bottom-color: #334155;
-        }
-
-        thead th {
-            background: #273548;
-            color: #c6d5e3;
-        }
-    }
-
-    &__empty {
-        strong {
-            color: #e2e8f0;
-        }
-
-        i {
-            color: #c4b5fd;
+            font-size: var(--text-sm);
         }
     }
 }
@@ -197,17 +146,17 @@
     .reports-chart-card {
         &__header {
             flex-direction: column;
-            gap: 12px;
-            padding: 22px 18px 8px;
+            gap: var(--space-3);
+            padding: var(--space-5) var(--space-4) var(--space-2);
         }
 
         &__body {
             min-height: 280px;
-            padding: 4px 8px 12px;
+            padding: var(--space-1) var(--space-2) var(--space-3);
         }
 
         &__data {
-            margin: 0 18px 18px;
+            margin: 0 var(--space-4) var(--space-4);
         }
 
         &__body > div,

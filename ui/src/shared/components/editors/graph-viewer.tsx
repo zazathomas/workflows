@@ -19,7 +19,8 @@ export function GraphViewer({workflowDefinition}: {workflowDefinition: Workflow 
         expandNodes: new Set(),
         showArtifacts: false,
         showInvokingTemplateName: false,
-        showTemplateRefsGrouping: false
+        showTemplateRefsGrouping: false,
+        hideHealthyNodes: false
     });
 
     useEffect(() => {

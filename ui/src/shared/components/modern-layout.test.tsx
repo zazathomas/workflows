@@ -65,6 +65,25 @@ describe('ModernLayout', () => {
         expect(container.querySelector('.modern-layout')).not.toHaveClass('modern-layout--expanded');
     });
 
+    it('marks the nav item carrying an attention dot only', () => {
+        const history = createMemoryHistory({initialEntries: ['/workflows']});
+        const {getByRole} = render(
+            <ModernLayout
+                history={history}
+                navItems={[
+                    {path: '/workflows', iconClassName: 'fa fa-stream', title: 'Runs', attention: true},
+                    {path: '/schedules', iconClassName: 'fa fa-clock', title: 'Schedules'}
+                ]}>
+                <div>content</div>
+            </ModernLayout>
+        );
+
+        // The dot rides the Runs item's icon; the other items stay clean.
+        expect(getByRole('button', {name: 'Runs'})).toHaveClass('has-attention');
+        expect(getByRole('button', {name: 'Runs'}).querySelector('i')).not.toBeNull();
+        expect(getByRole('button', {name: 'Schedules'})).not.toHaveClass('has-attention');
+    });
+
     it('keeps expansion controlled while preserving mobile keyboard behavior', () => {
         const history = createMemoryHistory({initialEntries: ['/workflows']});
         const {container, getByRole} = render(

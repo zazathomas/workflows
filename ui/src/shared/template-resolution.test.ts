@@ -1,5 +1,5 @@
 import {NodeStatus, Template, Workflow} from './models';
-import {getMainContainerNames} from './template-resolution';
+import {getMainContainerNames, isRunnerNode} from './template-resolution';
 
 const workflow = (templates: Template[] = []): Workflow =>
     ({
@@ -66,5 +66,41 @@ describe('getMainContainerNames', () => {
         ]);
 
         expect(getMainContainerNames(containerSetWorkflow, node('container-set'))).toEqual(['step-1', 'step-2', 'step-3', 'step-4']);
+    });
+});
+
+describe('isRunnerNode', () => {
+    const runnerWorkflow = (type: string) =>
+        ({
+            metadata: {name: 'test-workflow', namespace: 'argo'},
+            spec: {templates: [{name: 'remote', plugin: {runner: {pool: 'build'}}}]},
+            status: {
+                nodes: {
+                    'test-node': {
+                        id: 'test-node',
+                        type,
+                        phase: 'Running',
+                        templateName: 'remote'
+                    }
+                }
+            }
+        }) as unknown as Workflow;
+
+    test('identifies plugin nodes whose template is a runner plugin', () => {
+        expect(isRunnerNode(runnerWorkflow('Plugin'), runnerWorkflow('Plugin').status.nodes['test-node'])).toBe(true);
+    });
+
+    test('rejects pod nodes and non-runner plugins', () => {
+        expect(isRunnerNode(runnerWorkflow('Pod'), runnerWorkflow('Pod').status.nodes['test-node'])).toBe(false);
+        const otherPlugin = {
+            metadata: {name: 'test-workflow', namespace: 'argo'},
+            spec: {templates: [{name: 'remote', plugin: {other: {}}}]},
+            status: {nodes: {'test-node': {id: 'test-node', type: 'Plugin', phase: 'Running', templateName: 'remote'}}}
+        } as unknown as Workflow;
+        expect(isRunnerNode(otherPlugin, otherPlugin.status.nodes['test-node'])).toBe(false);
+    });
+
+    test('rejects nodes without a node', () => {
+        expect(isRunnerNode(runnerWorkflow('Plugin'), undefined)).toBe(false);
     });
 });

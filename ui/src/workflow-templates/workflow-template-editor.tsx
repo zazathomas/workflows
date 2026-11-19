@@ -8,6 +8,7 @@ import {WorkflowParametersEditor} from '../shared/components/editors/workflow-pa
 import {ObjectEditor} from '../shared/components/object-editor';
 import type {Lang} from '../shared/components/object-parser';
 import {WorkflowTemplate} from '../shared/models';
+import {JobChanges} from './job-changes';
 
 export function WorkflowTemplateEditor({
     onChange,
@@ -17,7 +18,8 @@ export function WorkflowTemplateEditor({
     selectedTabKey,
     template,
     serialization,
-    lang
+    lang,
+    showChanges
 }: {
     template: WorkflowTemplate;
     serialization: string;
@@ -27,6 +29,8 @@ export function WorkflowTemplateEditor({
     onTabSelected?: (tab: string) => void;
     onLangChange: (lang: Lang) => void;
     selectedTabKey?: string;
+    /** Show the managedFields-derived change history (details pages only). */
+    showChanges?: boolean;
 }) {
     return (
         <Tabs
@@ -73,7 +77,16 @@ export function WorkflowTemplateEditor({
                     key: 'graph',
                     title: 'Graph',
                     content: <GraphViewer workflowDefinition={template} />
-                }
+                },
+                ...(showChanges
+                    ? [
+                          {
+                              key: 'changes',
+                              title: 'Changes',
+                              content: <JobChanges object={template} />
+                          }
+                      ]
+                    : [])
             ]}
         />
     );

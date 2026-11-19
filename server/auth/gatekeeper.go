@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	kubemetadata "k8s.io/client-go/metadata"
 	"k8s.io/client-go/rest"
 
 	workflow "github.com/argoproj/argo-workflows/v4/pkg/client/clientset/versioned"
@@ -44,11 +45,12 @@ import (
 type ContextKey string
 
 const (
-	DynamicKey ContextKey = "dynamic.Interface"
-	WfKey      ContextKey = "workflow.Interface"
-	EventsKey  ContextKey = "events.Interface"
-	KubeKey    ContextKey = "kubernetes.Interface"
-	ClaimsKey  ContextKey = "types.Claims"
+	DynamicKey  ContextKey = "dynamic.Interface"
+	MetadataKey ContextKey = "metadata.Interface"
+	WfKey       ContextKey = "workflow.Interface"
+	EventsKey   ContextKey = "events.Interface"
+	KubeKey     ContextKey = "kubernetes.Interface"
+	ClaimsKey   ContextKey = "types.Claims"
 )
 
 type Gatekeeper interface {
@@ -132,11 +134,25 @@ func (s *gatekeeper) StreamServerInterceptor() grpc.StreamServerInterceptor {
 }
 
 type parameterSourceAccessKey struct{}
+type authenticationModeKey struct{}
+
+// AuthenticatedWithSSO distinguishes verified OIDC claims from JWT display hints.
+func AuthenticatedWithSSO(ctx context.Context) bool {
+	return ctx.Value(authenticationModeKey{}) == SSO
+}
 
 // CanUseParameterSources is true only when the request uses caller-scoped Kubernetes credentials.
 func CanUseParameterSources(ctx context.Context) bool {
 	allowed, _ := ctx.Value(parameterSourceAccessKey{}).(bool)
 	return allowed
+}
+
+// WithCallerScopedCredentials marks a context as carrying caller-scoped
+// Kubernetes credentials, the way the gatekeeper does for client auth and
+// SSO with RBAC. Extension handlers that refuse server auth mode (parameter
+// sources, runner administration) can then be exercised in tests.
+func WithCallerScopedCredentials(ctx context.Context) context.Context {
+	return context.WithValue(ctx, parameterSourceAccessKey{}, true)
 }
 
 func (s *gatekeeper) ContextWithRequest(ctx context.Context, req any) (context.Context, error) {
@@ -145,6 +161,7 @@ func (s *gatekeeper) ContextWithRequest(ctx context.Context, req any) (context.C
 		return nil, err
 	}
 	ctx = context.WithValue(ctx, DynamicKey, clients.Dynamic)
+	ctx = context.WithValue(ctx, MetadataKey, clients.Metadata)
 	ctx = context.WithValue(ctx, WfKey, clients.Workflow)
 	ctx = context.WithValue(ctx, EventsKey, clients.Events)
 	ctx = context.WithValue(ctx, KubeKey, clients.Kubernetes)
@@ -154,6 +171,7 @@ func (s *gatekeeper) ContextWithRequest(ctx context.Context, req any) (context.C
 		mode, valid := s.Modes.GetMode(token)
 		if valid {
 			ctx = context.WithValue(ctx, parameterSourceAccessKey{}, mode == Client || (mode == SSO && s.ssoIf.IsRBACEnabled()))
+			ctx = context.WithValue(ctx, authenticationModeKey{}, mode)
 			break
 		}
 	}
@@ -162,6 +180,12 @@ func (s *gatekeeper) ContextWithRequest(ctx context.Context, req any) (context.C
 
 func (s *gatekeeper) Context(ctx context.Context) (context.Context, error) {
 	return s.ContextWithRequest(ctx, nil)
+}
+
+// GetMetadataClient returns the caller's metadata-only Kubernetes client.
+func GetMetadataClient(ctx context.Context) kubemetadata.Interface {
+	client, _ := ctx.Value(MetadataKey).(kubemetadata.Interface)
+	return client
 }
 
 func GetWfClient(ctx context.Context) workflow.Interface {
@@ -409,7 +433,12 @@ func DefaultClientForAuthorization(authorization string, config *rest.Config) (*
 	if err != nil {
 		return nil, nil, fmt.Errorf("failure to create kubernetes client: %w", err)
 	}
+	metadataClient, err := kubemetadata.NewForConfig(restConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failure to create metadata client: %w", err)
+	}
 	return restConfig, &servertypes.Clients{
+		Metadata:   metadataClient,
 		Dynamic:    dynamicClient,
 		Workflow:   wfClient,
 		Events:     eventsClient,

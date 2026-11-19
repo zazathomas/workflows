@@ -92,7 +92,7 @@ func TestMySQLListWorkflows(t *testing.T) {
 					UID:               types.UID("test-uid-001"),
 					CreationTimestamp: now,
 					Labels:            map[string]string{"env": "test"},
-					Annotations:       map[string]string{"note": "integration-test"},
+					Annotations:       map[string]string{"note": "integration-test", "workflows.argoproj.io/title": "Archive 100%_!"},
 				},
 				Spec: wfv1.WorkflowSpec{
 					Suspend: new(true),
@@ -127,6 +127,20 @@ func TestMySQLListWorkflows(t *testing.T) {
 			assert.Equal(t, new(true), wf.Spec.Suspend)
 			assert.Equal(t, "hello", wf.Spec.Arguments.Parameters[0].Value.String())
 			assert.Equal(t, wfv1.EstimatedDuration(30), wf.Status.EstimatedDuration)
+
+			filters := sutils.ListOptions{Namespace: "default", Limit: 1, NameTitleContains: "ARCHIVE 100%_!", LabelContains: "ENV=te"}
+			matches, err := archive.ListWorkflows(ctx, filters)
+			require.NoError(t, err)
+			require.Len(t, matches, 1)
+			count, err := archive.CountWorkflows(ctx, filters)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, count)
+			more, err := archive.HasMoreWorkflows(ctx, filters.WithLimit(0))
+			require.NoError(t, err)
+			require.True(t, more)
+			more, err = archive.HasMoreWorkflows(ctx, filters.WithOffset(1).WithLimit(0))
+			require.NoError(t, err)
+			require.False(t, more)
 		})
 	}
 }

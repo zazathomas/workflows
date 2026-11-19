@@ -47,7 +47,9 @@ describe('WorkflowTemplate examples', () => {
         expect(all.length).toBeGreaterThanOrEqual(10);
         for (const {file, resource} of all) {
             expect(resource.spec?.entrypoint).toBeTruthy();
-            expect(resource.metadata?.namespace).toBe('argo');
+            // Runner examples intentionally use the separate builds namespace.
+            const runnerExample = file === 'mixed-runner-broker.yaml' || file === 'runner-labels-gpu.yaml';
+            expect(resource.metadata?.namespace).toBe(runnerExample ? 'builds' : 'argo');
             expect(resource.spec?.serviceAccountName).toBeTruthy();
             if (resource.spec?.serviceAccountName === 'wf-runner') {
                 expect(resource.spec?.archiveLogs).toBe(false);

@@ -1,0 +1,583 @@
+// Design tokens for the workflows console.
+//
+// Every colour, radius, shadow, type size, space step and duration used by the
+// UI is declared here, once per theme. Components read the custom properties
+// and never carry a literal colour of their own, so a surface added tomorrow is
+// themed without a second copy of its rules.
+//
+// Theme selection: `ModernLayout` puts `theme-light`/`theme-dark` on the layout
+// root and `modern-theme-dark` on `<body>`. Tokens are declared on both, so
+// portals (popups, dropdowns, date pickers) that render outside the layout root
+// inherit the same values.
+//
+// This file is imported after `argo-ui/src/styles/main.scss` in `app.tsx`, so
+// the element overrides below win over the argo-ui defaults they replace.
+
+// The working typeface. Weight 400 ships in `assets/fonts/` (copied there by
+// webpack); without this @font-face the stack silently falls back to
+// Helvetica Neue/Arial on machines without a local Heebo install. Heavier
+// cuts (500–700) are DESIGN.md's outstanding typography task.
+@font-face {
+    font-family: 'Heebo';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('assets/fonts/Heebo-Regular.ttf') format('truetype');
+}
+
+:root,
+.theme-light,
+.login--light {
+    color-scheme: light;
+
+    // Surfaces
+    --canvas: #f4f7f9;
+    --surface: #ffffff;
+    --surface-sunken: #edf4f7;
+    --surface-hover: #e7f4f7;
+    --surface-selected: #d8f1f5;
+    --scrim: rgba(15, 23, 42, 0.45);
+    --overlay: rgba(15, 23, 42, 0.55);
+
+    // Text
+    --text-strong: #172033;
+    --text-primary: #263442;
+    --text-secondary: #526575;
+    --text-muted: #607086;
+    // Text and glyphs that sit on a saturated status or accent fill.
+    --on-strong: #ffffff;
+
+    // Lines
+    --border: #dce6ec;
+    --border-strong: #c7d8df;
+
+    // Interaction
+    --accent: #006f8a;
+    --accent-hover: #00566b;
+    --accent-strong: #006f8a;
+    --accent-strong-hover: #00566b;
+    --accent-soft: #e7f4f7;
+    --accent-soft-text: #00566b;
+    --focus-ring: #0d7d92;
+
+    // Status: tinted pair for text and chips, solid mark for graphs
+    --status-running-text: #0b6b7d;
+    --status-running-soft: #d8f1f5;
+    --status-succeeded-text: #0b7a5f;
+    --status-succeeded-soft: #dff5ec;
+    --status-failed-text: #a12b3b;
+    --status-failed-soft: #fdecee;
+    --status-pending-text: #7a5a12;
+    --status-pending-soft: #fdf3d7;
+    --status-neutral-text: #5b5470;
+    --status-neutral-soft: #eceaf3;
+    --status-running-mark: #0dadea;
+    --status-succeeded-mark: #18be94;
+    --status-failed-mark: #e96d76;
+    --status-pending-mark: #f4c030;
+    --status-neutral-mark: #766f94;
+
+    // The log console is a terminal: dark in both themes so the ANSI palette
+    // reads the same everywhere.
+    --terminal-surface: #0d1117;
+    --terminal-border: #30363d;
+
+    // Elevation
+    --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.06);
+    --shadow-raised: 0 8px 20px rgba(15, 23, 42, 0.16);
+    --shadow-overlay: 0 18px 44px rgba(15, 23, 42, 0.24);
+
+    // Navigation chrome
+    --nav-surface: linear-gradient(180deg, #eaf3f6 0%, #f3f8fa 100%);
+    --nav-border: #e5eaf0;
+    --nav-item: #3a4757;
+    --nav-item-icon: #56677d;
+    --nav-item-hover: #e7f4f7;
+    --nav-item-active: #d8f1f5;
+    --nav-item-active-text: #00566b;
+}
+
+.theme-dark,
+body.modern-theme-dark,
+.login--dark {
+    color-scheme: dark;
+
+    --canvas: #111827;
+    --surface: #1f2937;
+    --surface-sunken: #273548;
+    --surface-hover: #263549;
+    --surface-selected: #164e63;
+    --scrim: rgba(2, 6, 23, 0.72);
+    --overlay: rgba(2, 6, 23, 0.72);
+
+    --text-strong: #f8fafc;
+    --text-primary: #e5edf5;
+    --text-secondary: #c6d5e3;
+    --text-muted: #a8b8ca;
+    --on-strong: #ffffff;
+
+    --border: #334155;
+    --border-strong: #475569;
+
+    --accent: #9fe8ef;
+    --accent-hover: #cffafe;
+    --accent-strong: #006f8a;
+    --accent-strong-hover: #0a7f99;
+    --accent-soft: #164e63;
+    --accent-soft-text: #cffafe;
+    --focus-ring: #22d3ee;
+
+    --status-running-text: #67e8f9;
+    --status-running-soft: #164e63;
+    --status-succeeded-text: #6ee7b7;
+    --status-succeeded-soft: #0d3d31;
+    --status-failed-text: #fda4af;
+    --status-failed-soft: #4a1f26;
+    --status-pending-text: #fcd34d;
+    --status-pending-soft: #46350d;
+    --status-neutral-text: #c4c0d8;
+    --status-neutral-soft: #2f2b3d;
+
+    --terminal-surface: #0b1120;
+    --terminal-border: #30363d;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.24), 0 8px 24px rgba(0, 0, 0, 0.22);
+    --shadow-raised: 0 8px 20px rgba(0, 0, 0, 0.32);
+    --shadow-overlay: 0 18px 48px rgba(0, 0, 0, 0.5);
+
+    --nav-surface: linear-gradient(180deg, #090f1c 0%, #101827 100%);
+    --nav-border: #202b3a;
+    --nav-item: #c4ccd9;
+    --nav-item-icon: #8f9db2;
+    --nav-item-hover: #182737;
+    --nav-item-active: #173440;
+    --nav-item-active-text: #56d4df;
+}
+
+// Scales. These do not change between themes, so they live outside both blocks.
+:root,
+.theme-light,
+.theme-dark,
+.login--light,
+.login--dark,
+body.modern-theme-dark {
+    // Corner radius: the UI uses five steps, nothing else.
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-pill: 999px;
+
+    // Type scale: seven steps, nothing else.
+    --text-2xs: 11px;
+    --text-xs: 12px;
+    --text-sm: 13px;
+    --text-md: 14px;
+    --text-lg: 16px;
+    --text-xl: 20px;
+    --text-2xl: 26px;
+    --font-body: 'Heebo', 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+    // Space scale
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+
+    // Motion
+    --duration-fast: 120ms;
+    --duration-base: 180ms;
+    --ease: cubic-bezier(0.2, 0.6, 0.3, 1);
+}
+
+// ---------------------------------------------------------------------------
+// Element layer
+//
+// These rules replace the argo-ui defaults that hardcode colours from its own
+// SCSS maps, and the fork's former per-theme duplicate blocks. Selectors use
+// `:is()` so they outrank argo-ui's `.theme-dark .thing` rules without needing
+// `!important`, and they also match inside portals through the body class.
+// ---------------------------------------------------------------------------
+
+$themed: ':is(.theme-light, .theme-dark, .login--light, .login--dark, body.modern-theme-dark)';
+
+body {
+    background: var(--canvas);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+}
+
+#{$themed} {
+    a:not(.argo-button) {
+        color: var(--accent);
+
+        &:hover,
+        &:focus-visible {
+            color: var(--accent-hover);
+        }
+    }
+
+    // main.scss suppresses every outline with `!important`; a single rule puts
+    // the ring back for anything focusable.
+    :is(a, button, summary, [role='button'], [role='tab'], input, select, textarea):focus-visible {
+        outline: 2px solid var(--focus-ring) !important;
+        outline-offset: 2px;
+    }
+
+    // Cards ----------------------------------------------------------------
+    .white-box {
+        padding: var(--space-5);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+        box-shadow: var(--shadow-card);
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+
+        &:not(:last-child) {
+            margin-bottom: var(--space-4);
+        }
+
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+            margin: 0 0 var(--space-3);
+            color: var(--text-strong);
+            font-size: var(--text-lg);
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            text-transform: none;
+        }
+
+        p {
+            font-size: var(--text-sm);
+        }
+    }
+
+    .white-box__details-label {
+        color: var(--text-secondary);
+        font-weight: 500;
+    }
+
+    .white-box__details-row {
+        color: var(--text-primary);
+    }
+
+    .white-box__details-row .columns {
+        border-bottom-color: var(--border);
+    }
+
+    // Lists ----------------------------------------------------------------
+    .argo-table-list {
+        background: transparent;
+    }
+
+    .argo-table-list__head {
+        margin: 0 0 var(--space-2);
+        padding: 0 var(--space-3);
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: var(--text-2xs);
+        font-weight: 600;
+        letter-spacing: 0.04em;
+    }
+
+    .argo-table-list__row {
+        margin: 0 0 var(--space-2);
+        padding: var(--space-2) var(--space-3);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+        box-shadow: none;
+        color: var(--text-primary);
+        font-size: var(--text-sm);
+        line-height: 1.5;
+        transition: background-color var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
+
+        .title-text {
+            color: var(--text-strong);
+        }
+
+        &:hover {
+            border-color: var(--border-strong);
+        }
+
+        &.selected {
+            border-color: var(--accent-soft-text);
+            background: var(--surface-selected);
+        }
+    }
+
+    .argo-table-list--clickable .argo-table-list__row:hover {
+        box-shadow: none;
+    }
+
+    // Buttons --------------------------------------------------------------
+    .argo-button {
+        padding: 7px 16px;
+        border-radius: var(--radius-pill);
+        color: var(--accent);
+        font-size: var(--text-sm);
+        font-weight: 600;
+        letter-spacing: 0;
+        text-transform: none;
+        transition: background-color var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+
+        &:not(.disabled):not([disabled]) {
+            &:hover,
+            &:focus {
+                background-color: var(--accent-soft);
+                color: var(--accent-soft-text);
+            }
+        }
+
+        &.disabled,
+        &[disabled] {
+            color: var(--text-muted);
+        }
+    }
+
+    .argo-button--base:not(.disabled):not([disabled]) {
+        background-color: var(--accent-strong);
+        color: #ffffff;
+
+        &:hover,
+        &:focus {
+            background-color: var(--accent-strong-hover);
+            color: #ffffff;
+        }
+    }
+
+    .argo-button--base.disabled,
+    .argo-button--base[disabled] {
+        background-color: var(--surface-sunken);
+        color: var(--text-muted);
+    }
+
+    .argo-button--base-o {
+        color: var(--accent);
+        box-shadow: inset 0 0 0 1px var(--border-strong);
+
+        &:not(.disabled):not([disabled]) {
+            &:hover,
+            &:focus {
+                background-color: var(--accent-soft);
+                color: var(--accent-soft-text);
+                box-shadow: inset 0 0 0 1px var(--accent);
+            }
+        }
+    }
+
+    .argo-button--base-o.disabled,
+    .argo-button--base-o[disabled] {
+        color: var(--text-muted);
+        box-shadow: inset 0 0 0 1px var(--border);
+    }
+
+    .argo-button--link:not(.disabled):not([disabled]) {
+        &:hover,
+        &:focus {
+            background-color: transparent;
+            text-decoration: underline;
+        }
+    }
+
+    // Fields ---------------------------------------------------------------
+    .argo-field,
+    .argo-textarea,
+    input:not([type='checkbox']):not([type='radio']):not([type='range']),
+    select,
+    textarea {
+        padding: 7px 10px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-md);
+        background-color: var(--surface);
+        color: var(--text-primary);
+        font-family: inherit;
+        font-size: var(--text-sm);
+
+        &::placeholder {
+            color: var(--text-muted);
+        }
+
+        &:hover {
+            border-color: var(--accent);
+        }
+
+        &:focus,
+        &:focus-visible {
+            border-color: var(--accent);
+            outline: 2px solid var(--focus-ring) !important;
+            outline-offset: 1px;
+        }
+    }
+
+    .argo-form-row label:not(.argo-label-placeholder) {
+        color: var(--text-secondary);
+        font-size: var(--text-xs);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        text-transform: none;
+    }
+
+    input[type='checkbox'],
+    input[type='radio'] {
+        accent-color: var(--accent-strong);
+    }
+
+    // argo-ui draws its own checkbox chrome in a sibling <span> and leaves the
+    // native input stacked on top; hide the native rendering so only one box
+    // is visible.
+    .argo-checkbox input {
+        appearance: none;
+        -webkit-appearance: none;
+        border: 0;
+        background: transparent;
+    }
+
+    .argo-checkbox input + span {
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: #ffffff;
+    }
+
+    .argo-checkbox input:checked + span {
+        border: 1px solid var(--accent-strong);
+        background-color: var(--accent-strong);
+    }
+
+    .argo-checkbox input:disabled + span {
+        border-color: var(--border);
+        background-color: var(--surface-sunken);
+    }
+
+    .argo-radio input + span {
+        border-color: var(--border-strong);
+    }
+
+    .argo-radio input:checked + span {
+        border-color: var(--accent-strong);
+        background-color: var(--accent-strong);
+        box-shadow: inset 0 0 0 3px var(--surface);
+    }
+
+    // Popups, dropdowns, panels -------------------------------------------
+    .popup-container {
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-xl);
+        background: var(--surface);
+        box-shadow: var(--shadow-overlay);
+        color: var(--text-primary);
+
+        &__header__normal,
+        &__body,
+        &__footer {
+            background: var(--surface);
+            color: var(--text-primary);
+        }
+
+        &__header__normal {
+            border-bottom: 1px solid var(--border);
+        }
+    }
+
+    .popup-overlay {
+        background: var(--overlay);
+    }
+
+    .argo-dropdown__content,
+    .dropdown-pane,
+    .modal-content,
+    .react-datepicker,
+    .select__options {
+        border: 1px solid var(--border-strong) !important;
+        border-radius: var(--radius-lg);
+        background: var(--surface) !important;
+        box-shadow: var(--shadow-raised) !important;
+        color: var(--text-primary);
+    }
+
+    .argo-dropdown__content.is-menu li,
+    .select__option {
+        color: var(--text-primary);
+
+        &:hover,
+        &:focus-within,
+        &.selected {
+            background: var(--surface-hover);
+            color: var(--text-strong);
+        }
+    }
+
+    .select__value {
+        color: var(--text-primary);
+    }
+
+    .select__empty,
+    .select__search {
+        color: var(--text-muted);
+    }
+
+    .react-datepicker__header,
+    .react-datepicker__day--keyboard-selected,
+    .react-datepicker__day--selected {
+        background: var(--surface-sunken);
+        color: var(--text-primary);
+    }
+
+    .sliding-panel__close:hover {
+        background: var(--surface-hover);
+    }
+
+    .notification {
+        background: var(--surface);
+        color: var(--text-primary);
+    }
+
+    // Chrome ---------------------------------------------------------------
+    .page,
+    .page__content-wrapper {
+        background: var(--canvas);
+        color: var(--text-primary);
+    }
+
+    .top-bar {
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in srgb, var(--surface) 92%, transparent);
+        box-shadow: 0 1px 0 var(--border);
+        color: var(--text-primary);
+        backdrop-filter: blur(12px);
+    }
+
+    .top-bar__breadcrumbs,
+    .top-bar__breadcrumbs-last-item,
+    .top-bar__title {
+        color: var(--text-secondary);
+    }
+
+    .top-bar__breadcrumbs-last-item {
+        color: var(--text-strong);
+        font-weight: 600;
+    }
+
+    kbd {
+        padding: 1px 6px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+        background: var(--surface-sunken);
+        color: var(--text-primary);
+        font-family: var(--font-mono);
+        font-size: var(--text-2xs);
+    }
+
+    code:not([class*='language-']) {
+        font-family: var(--font-mono);
+    }
+}

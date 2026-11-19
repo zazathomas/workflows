@@ -1,6 +1,13 @@
 name: workflows CI
+
+# Branch and pull-request CI. Pull requests are the per-branch gate, so `push`
+# only covers the default branch: a branch with an open PR would otherwise run
+# this whole pipeline twice for the same tree. Tags are the release workflow's
+# job, and it calls its gate explicitly.
 on:
   push:
+    branches:
+      - main
   pull_request:
   schedule:
     - cron: '15 3 * * *'
@@ -8,32 +15,58 @@ on:
 permissions:
   contents: read
 
+# Superseded pull-request pushes stop early instead of finishing to fail.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   server:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      broker-postgres:
+        image: postgres:17.4-alpine@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5
+        env:
+          POSTGRES_USER: broker
+          POSTGRES_PASSWORD: broker-ci-only
+          POSTGRES_DB: broker
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U broker -d broker"
+          --health-interval 5s --health-timeout 5s --health-retries 12
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '24'
-          cache: yarn
-          cache-dependency-path: ui/yarn.lock
-      - run: make cli
-      - name: Fetch registered upstream releases
-        run: python3 hack/fetch-upstream-versions.py
+      # `ui/embed.go` embeds `dist/app`, which is gitignored, so a fresh
+      # checkout has no bundle and the server packages would not compile. A
+      # placeholder is enough: no Go test reads its contents, and the real
+      # production bundle is built and exercised by the image and UI jobs.
+      - name: Create the embedded UI placeholder
+        run: mkdir -p ui/dist/app && printf '<!doctype html><title>placeholder</title>' > ui/dist/app/index.html
       - run: make test-hack
-      - run: make compatibility
-      - name: Test all retained Go packages
+      # The per-release API contract check lives in the compatibility matrix
+      # (a pull-request gate); do not repeat the tag fetches here.
+      # One run over every package supersedes the focused list in
+      # `make compatibility` (that target is what you run locally, and what the
+      # docs point at; it is a subset of ./...).
+      - name: Test every Go package
         env:
           KUBECONFIG: /dev/null
           GOFLAGS: -mod=mod -tags=kubernetes_protomessage_one_more_release
+          BROKER_TEST_DATABASE_URL: postgres://broker:broker-ci-only@127.0.0.1:${{ job.services.broker-postgres.ports[5432] }}/broker?sslmode=disable
         run: go test -p 2 ./...
+      - name: Check the API fixtures exist
+        env:
+          GOFLAGS: -mod=mod
+        run: go test -tags=api,kubernetes_protomessage_one_more_release ./test/e2e -run '^TestAPIFixturesExist$'
 
   ui:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -44,27 +77,95 @@ jobs:
       - run: yarn --cwd ui install --frozen-lockfile
       - run: yarn --cwd ui test --runInBand
       - run: yarn --cwd ui lint
+      - name: Cache the Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('ui/yarn.lock') }}
+          restore-keys: playwright-${{ runner.os }}-
+      # `--with-deps` installs the system libraries and skips the browser
+      # download when the cache above restored it.
       - run: yarn --cwd ui playwright install --with-deps chromium
-      - name: Start UI development server
-        run: |
-          yarn --cwd ui start > /tmp/webpack-dev-server.log 2>&1 &
-          for i in $(seq 1 120); do
-            if curl -fs http://localhost:8080/ > /dev/null; then exit 0; fi
-            sleep 2
-          done
-          tail -n 100 /tmp/webpack-dev-server.log
-          exit 1
+      # playwright.mock.config.ts starts the dev server itself.
       - run: make test-ui-e2e
 
-  image:
+  runner:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build and run production image
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      # The same layers are reused by the compatibility matrix and the release
+      # publish (same cache scope), so the runner image is compiled once per
+      # commit rather than once per job.
+      - name: Build the runner image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile.runner
+          platforms: linux/amd64
+          load: true
+          tags: workflows-runner:verify
+          build-args: |
+            VERSION=ci
+            GIT_COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=runner-image
+          cache-to: type=gha,mode=max,scope=runner-image
+      - run: docker run --rm --entrypoint argo-runner workflows-runner:verify version
+      - name: Start a limited job through the runner image entrypoint
+        run: hack/test-runner-dind.sh workflows-runner:verify
+      - name: Run the executor integration tests against a throwaway Docker daemon
         run: |
-          docker build --target server --build-arg VERSION=ci --build-arg GIT_COMMIT="$GITHUB_SHA" -t workflows:verify .
-          docker run --rm workflows:verify version
+          # The privileged DinD flavour: GitHub's Ubuntu 24.04 runners restrict
+          # unprivileged user namespaces, so rootless DinD needs the host-side
+          # AppArmor profile documented in docs/runners.md.
+          docker network create runner-integration
+          docker run -d --name dind --network runner-integration --privileged \
+            -e DOCKER_TLS_CERTDIR= docker:27-dind
+          for i in $(seq 1 60); do
+            docker exec dind docker info > /dev/null 2>&1 && break
+            sleep 2
+          done
+          # The test drives a real daemon; it does not need the runner binary,
+          # so there is nothing to compile beyond the test itself. Module and
+          # build caches are not mounted: a fresh runner has neither, and
+          # caching them for one package costs more than the download.
+          docker run --rm --network runner-integration \
+            -v "$PWD":/src \
+            -w /src -e RUNNER_DOCKER_INTEGRATION=1 -e DOCKER_HOST=tcp://dind:2375 \
+            golang:1.27.3-alpine3.23 \
+            sh -c 'go test -mod=mod -tags=kubernetes_protomessage_one_more_release -count=1 -timeout 300s -run TestIntegrationExecutor ./runner/ -v'
+
+  image:
+    # `main` is covered by the compatibility matrix, which builds this image for
+    # its cluster runs; the release builds and scans it again. Building here on
+    # every push only duplicates that work.
+    if: github.event_name == 'pull_request' || github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build the production image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          target: server
+          platforms: linux/amd64
+          load: true
+          tags: workflows:verify
+          build-args: |
+            VERSION=ci
+            GIT_COMMIT=${{ github.sha }}
+          # Shared with the compatibility matrix and the release, so the Go and
+          # UI layers of this image are built once per commit.
+          cache-from: type=gha,scope=server-image
+          cache-to: type=gha,mode=max,scope=server-image
+      - run: docker run --rm workflows:verify version
+      # Dev and build dependencies never reach the image, and advisories
+      # change without a code change: one nightly scan covers them.
       - name: Scan source and build dependencies
+        if: github.event_name == 'schedule'
         run: |
           docker run --rm -v "$PWD:/src:ro" \
             aquasec/trivy:0.67.2@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08 \

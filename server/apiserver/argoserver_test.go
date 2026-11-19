@@ -15,7 +15,9 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/argoproj/argo-workflows/v4/config"
+	"github.com/argoproj/argo-workflows/v4/server/approvals"
 	"github.com/argoproj/argo-workflows/v4/server/auth"
+	"github.com/argoproj/argo-workflows/v4/server/notify"
 	"github.com/argoproj/argo-workflows/v4/server/types"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
 	"github.com/argoproj/argo-workflows/v4/workflow/common"
@@ -109,6 +111,42 @@ func TestExtensionHandlersProvideLoggerInContext(t *testing.T) {
 
 			assert.Equal(t, tt.expected, recorder.Code)
 		})
+	}
+}
+
+type scopedGatekeeper struct {
+	auth.Gatekeeper
+	namespaces []string
+}
+
+func (g *scopedGatekeeper) ContextWithRequest(ctx context.Context, req any) (context.Context, error) {
+	g.namespaces = append(g.namespaces, req.(types.NamespacedRequest).GetNamespace())
+	return auth.WithCallerScopedCredentials(ctx), nil
+}
+
+func TestMutationRoutesBindAuthenticationToTargetNamespace(t *testing.T) {
+	for _, tc := range []struct {
+		path    string
+		resolve func(*http.Request) string
+	}{
+		{approvals.PathPrefix + "/team/run/gate", approvals.Namespace},
+		{notify.TestPathPrefix + "/team/test", notify.TestNamespace},
+	} {
+		gatekeeper := &scopedGatekeeper{}
+		server := &argoServer{gatekeeper: gatekeeper, managedNamespace: "team"}
+		handler := server.authenticatedInNamespace(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}), tc.resolve)
+		for _, query := range []string{"", "?namespace=other", "?namespace=team&namespace=other"} {
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodPost, tc.path+query, nil))
+			if query == "" {
+				assert.Equal(t, http.StatusNoContent, recorder.Code)
+			} else {
+				assert.Equal(t, http.StatusBadRequest, recorder.Code)
+			}
+		}
+		assert.Equal(t, []string{"team"}, gatekeeper.namespaces)
 	}
 }
 

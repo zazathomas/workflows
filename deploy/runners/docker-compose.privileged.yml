@@ -1,0 +1,10 @@
+# Explicit opt-in for a trusted, dedicated or disposable Docker host:
+#   docker compose -f deploy/runners/docker-compose.yml \
+#     -f deploy/runners/docker-compose.privileged.yml up -d
+services:
+  runner:
+    user: "0"
+    privileged: true
+    cgroup: private
+    environment:
+      DIND_MODE: privileged

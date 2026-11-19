@@ -1,46 +1,67 @@
 @import 'node_modules/argo-ui/src/styles/config';
 
+// Two-part status chip. The label names the run; the status field carries the
+// phase as a tinted pair (soft background, saturated text) so the phase colour
+// keeps its meaning in both themes without failing contrast.
 .status-badge {
-  font-size: small;
-  height: 20px;
-  vertical-align: middle;
-
-  .label, .status {
-    display: inline-block;
-    text-align: center;
-    white-space: nowrap;
+    display: inline-flex;
     overflow: hidden;
-    padding: 1px 4px;
-    color: white;
-  }
+    align-items: stretch;
+    border: 1px solid var(--border, #dce6ec);
+    border-radius: var(--radius-pill, 999px);
+    font-family: var(--font-body, 'Heebo', sans-serif);
+    font-size: var(--text-xs, 12px);
+    line-height: 20px;
+    text-decoration: none;
+    vertical-align: middle;
 
-  .label {
-    background-color: $argo-color-gray-8;
-    width: 120px;
-  }
+    .label,
+    .status {
+        display: inline-block;
+        padding: 0 10px;
+        overflow: hidden;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
 
-  .status {
-    background-color: $argo-color-gray-6;
-    width: 80px;
-  }
+    .label {
+        max-width: 180px;
+        background: var(--surface-sunken, #edf4f7);
+        color: var(--text-secondary, #526575);
+        font-weight: 600;
+    }
 
-  .Unknown {
-    background-color: $argo-color-gray-6;
-  }
+    .status {
+        min-width: 88px;
+        border-left: 1px solid var(--border, #dce6ec);
+        font-weight: 600;
+        text-transform: capitalize;
+    }
 
-  .Pending {
-    background-color: $argo-status-warning-color;
-  }
+    .Running {
+        background: var(--status-running-soft, #d8f1f5);
+        color: var(--status-running-text, #0b6b7d);
+    }
 
-  .Running {
-    background-color: $argo-running-color;
-  }
+    .Succeeded {
+        background: var(--status-succeeded-soft, #dff5ec);
+        color: var(--status-succeeded-text, #0b7a5f);
+    }
 
-  .Failed, .Error {
-    background-color: $argo-failed-color;
-  }
+    .Failed,
+    .Error {
+        background: var(--status-failed-soft, #fdecee);
+        color: var(--status-failed-text, #a12b3b);
+    }
 
-  .Succeeded {
-    background-color: $argo-success-color;
-  }
+    .Pending {
+        background: var(--status-pending-soft, #fdf3d7);
+        color: var(--status-pending-text, #7a5a12);
+    }
+
+    .Unknown {
+        background: var(--status-neutral-soft, #eceaf3);
+        color: var(--status-neutral-text, #5b5470);
+    }
 }

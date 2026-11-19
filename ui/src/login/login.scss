@@ -1,139 +1,85 @@
 @import 'node_modules/argo-ui/src/styles/config';
 
+// The sign-in page renders outside the application shell, so `.login--light`
+// and `.login--dark` carry the token blocks themselves (see theme-tokens.scss).
 .login {
-    min-height: 100vh;
     display: flex;
+    min-height: 100vh;
     align-items: center;
     justify-content: center;
-    padding: 24px;
-    background: var(--login-background);
-    color: var(--login-text-primary);
-
-    &--dark {
-        color-scheme: dark;
-        --login-background: linear-gradient(180deg, #090f1c 0%, #111827 100%);
-        --login-card-bg: #1f2937;
-        --login-card-border: #334155;
-        --login-card-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
-        --login-title: #f8fafc;
-        --login-text-primary: #e5edf5;
-        --login-text-secondary: #a8b8ca;
-        --login-text-muted: #c6d5e3;
-        --login-panel-bg: #172033;
-        --login-panel-border: #334155;
-        --login-input-bg: #0b1120;
-        --login-input-border: #475569;
-        --login-input-text: #e5edf5;
-        --login-link: #9fe8ef;
-        --login-switch: #5eead4;
-        --login-switch-hover: #99f6e4;
-        --login-footer: #8f9db2;
-        --login-focus: #22d3ee;
-    }
-
-    &--light {
-        color-scheme: light;
-        --login-background: linear-gradient(180deg, #eef3f6 0%, #f4f7f9 100%);
-        --login-card-bg: #ffffff;
-        --login-card-border: #dce6ec;
-        --login-card-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
-        --login-title: #172033;
-        --login-text-primary: #263442;
-        --login-text-secondary: #607086;
-        --login-text-muted: #526575;
-        --login-panel-bg: #f7fbfc;
-        --login-panel-border: #e6edf1;
-        --login-input-bg: #ffffff;
-        --login-input-border: #c7d8df;
-        --login-input-text: #263442;
-        --login-link: #006f8a;
-        --login-switch: #006f8a;
-        --login-switch-hover: #004c67;
-        --login-footer: #8491a5;
-        --login-focus: #08aeca;
-    }
+    padding: var(--space-5);
+    background: var(--canvas);
+    color: var(--text-primary);
 
     &__card {
         width: 100%;
         max-width: 420px;
-        padding: 40px 36px 24px;
-        border: 1px solid var(--login-card-border);
-        border-radius: 16px;
-        background: var(--login-card-bg);
-        box-shadow: var(--login-card-shadow);
+        padding: var(--space-6) var(--space-5) var(--space-5);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xl);
+        background: var(--surface);
+        box-shadow: var(--shadow-card);
         text-align: center;
     }
 
     &__brand {
-        margin-bottom: 28px;
+        margin-bottom: var(--space-5);
     }
 
     &__logo {
-        width: 64px;
-        height: 64px;
-        border-radius: 16px;
+        width: 56px;
+        height: 56px;
+        border-radius: var(--radius-lg);
         object-fit: contain;
     }
 
     &__title {
-        margin: 16px 0 4px;
-        color: var(--login-title);
-        font-size: 22px;
+        margin: var(--space-3) 0 var(--space-1);
+        color: var(--text-strong);
+        font-size: var(--text-xl);
         font-weight: 700;
         letter-spacing: -0.02em;
     }
 
     &__subtitle {
         margin: 0;
-        color: var(--login-text-secondary);
-        font-size: 14px;
+        color: var(--text-secondary);
+        font-size: var(--text-md);
     }
 
     &__panel {
-        padding: 20px;
-        border: 1px solid var(--login-panel-border);
-        border-radius: 12px;
-        background: var(--login-panel-bg);
+        padding: var(--space-5);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--surface-sunken);
         text-align: left;
     }
 
     &__panel-title {
-        margin: 0 0 4px;
-        color: var(--login-text-primary);
-        font-size: 15px;
-        font-weight: 700;
+        margin: 0 0 var(--space-1);
+        color: var(--text-strong);
+        font-size: var(--text-md);
+        font-weight: 600;
     }
 
     &__panel-hint {
-        margin: 0 0 16px;
-        color: var(--login-text-secondary);
-        font-size: 13px;
+        margin: 0 0 var(--space-4);
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
     }
 
     &__label {
         display: block;
         margin-bottom: 6px;
-        color: var(--login-text-muted);
-        font-size: 12px;
+        color: var(--text-secondary);
+        font-size: var(--text-xs);
         font-weight: 600;
-        text-transform: uppercase;
     }
 
     &__token-input {
         width: 100%;
-        margin-bottom: 14px;
-        padding: 10px;
-        border: 1px solid var(--login-input-border);
-        border-radius: 8px;
-        background: var(--login-input-bg);
-        color: var(--login-input-text);
-        font: inherit;
+        margin-bottom: var(--space-3);
         resize: vertical;
-
-        &:focus-visible {
-            outline: 2px solid var(--login-focus);
-            outline-offset: 1px;
-        }
     }
 
     &__submit {
@@ -141,39 +87,23 @@
         justify-content: center;
     }
 
-    .argo-button--base:not(.disabled):not([disabled]) {
-        border: 0;
-        background: #006f8a;
-        color: #ffffff;
-
-        &:hover,
-        &:focus-visible {
-            background: #005f73;
-            color: #ffffff;
-            outline: 2px solid var(--login-focus);
-            outline-offset: 2px;
-        }
-    }
-
     &__switch {
-        display: block;
-        width: 100%;
-        margin-top: 14px;
+        display: inline-block;
+        margin-top: var(--space-3);
         padding: 6px 0;
         border: 0;
         background: transparent;
-        color: var(--login-switch);
+        color: var(--accent);
         cursor: pointer;
         font: inherit;
-        font-size: 13px;
+        font-size: var(--text-sm);
         font-weight: 600;
         text-align: center;
 
         &:hover,
         &:focus-visible {
-            color: var(--login-switch-hover);
+            color: var(--accent-hover);
             text-decoration: underline;
-            outline: none;
         }
     }
 
@@ -181,13 +111,18 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 12px;
-        margin-top: 24px;
-        color: var(--login-footer);
-        font-size: 13px;
+        gap: var(--space-2);
+        margin-top: var(--space-4);
+        color: var(--text-muted);
+        font-size: var(--text-sm);
+
+        .login__switch {
+            margin-top: 0;
+            width: auto;
+        }
 
         a {
-            color: var(--login-link);
+            color: var(--accent);
             text-decoration: none;
 
             &:hover,

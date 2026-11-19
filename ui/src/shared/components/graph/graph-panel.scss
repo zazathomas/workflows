@@ -26,36 +26,36 @@
 
 .node-search-bar {
     display: inline-block;
-    margin-left: 10px;
+    margin-left: var(--space-2);
 }
 
 .graph-options-panel {
+    position: fixed;
+    display: inline-block;
     margin: 10px;
     padding: 10px;
-    display: inline-block;
-    background-color: white;
-    box-shadow: 1px 1px 3px $argo-color-gray-5;
-    position: fixed;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface);
+    box-shadow: var(--shadow-raised);
 
     div.argo-dropdown,
     > button {
-        padding: 5px;
+        padding: 5px 8px;
         border: 1px solid transparent;
-        border-radius: 5px;
+        border-radius: var(--radius-sm);
         background: transparent;
-        color: $argo-color-gray-6;
+        color: var(--text-secondary);
         cursor: pointer;
 
         &:hover,
         &:focus-visible {
-            background-color: $argo-color-gray-2;
-            outline: 2px solid #08aeca;
-            outline-offset: 1px;
+            background-color: var(--surface-hover);
         }
 
         &.active {
-            border-color: $argo-color-gray-4;
-            background-color: $argo-color-gray-3;
+            border-color: var(--border-strong);
+            background-color: var(--surface-sunken);
         }
     }
 }
@@ -78,13 +78,13 @@
 }
 
 .graph {
-    text-align: center;
     max-height: calc(100vh - 2 * #{$top-bar-height});
+    text-align: center;
 
     .group {
         rect {
             fill: transparent;
-            stroke: $argo-color-gray-4;
+            stroke: var(--border-strong);
             stroke-dasharray: 4;
         }
     }
@@ -94,7 +94,7 @@
         dominant-baseline: central;
 
         &.node-label {
-            fill: $argo-color-gray-8;
+            fill: var(--text-primary);
         }
     }
 
@@ -102,38 +102,35 @@
         cursor: pointer;
 
         text {
-            fill: $argo-color-gray-1;
+            fill: var(--on-strong);
         }
 
         .bg {
-            fill: $argo-color-gray-6;
+            fill: var(--status-neutral-mark);
         }
 
         &.Warning,
-        &.Pending {
+        &.Pending,
+        &.Suspended {
             .bg {
-                fill: $argo-status-warning-color;
+                fill: var(--status-pending-mark);
             }
         }
 
         &.Suspended {
-            .bg {
-                fill: $argo-status-warning-color;
-            }
-
             animation: pulse 2s linear infinite;
         }
 
         &.Skipped,
         &.Omitted {
             .bg {
-                fill: $argo-color-gray-6;
+                fill: var(--status-neutral-mark);
             }
         }
 
         &.Running {
             .bg {
-                fill: $argo-running-color;
+                fill: var(--status-running-mark);
             }
 
             text.icon {
@@ -143,37 +140,37 @@
 
         &.Succeeded {
             .bg {
-                fill: $argo-success-color;
+                fill: var(--status-succeeded-mark);
             }
         }
 
         &.Error,
         &.Failed {
             .bg {
-                fill: $argo-failed-color;
+                fill: var(--status-failed-mark);
             }
         }
 
         &.selected {
             .bg {
-                stroke: $argo-color-yellow;
+                stroke: var(--status-pending-mark);
             }
         }
 
         path.icon {
             fill: transparent;
-            stroke: $argo-color-gray-2;
+            stroke: var(--on-strong);
         }
     }
 
     .edge {
         text {
-            fill: $argo-color-gray-8;
+            fill: var(--text-primary);
         }
 
         .line {
             fill: transparent;
-            stroke: $argo-color-gray-4;
+            stroke: var(--border-strong);
         }
 
         .edge-label {
@@ -190,22 +187,6 @@
     }
 
     .arrow {
-        fill: $argo-color-gray-4;
-    }
-}
-
-.theme-dark .graph {
-    text.node-label,
-    .edge text {
-        fill: #c6d5e3;
-    }
-
-    .group rect,
-    .edge .line {
-        stroke: #64748b;
-    }
-
-    .arrow {
-        fill: #64748b;
+        fill: var(--border-strong);
     }
 }

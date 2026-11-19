@@ -10,12 +10,9 @@
         padding: 12px 36px;
         border: 0;
         background: transparent;
-        @include themify($themes) {
-            color: themed('light-argo-gray-6');
-        }
-        font-size: 13px;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
         font-weight: 500;
-        text-transform: uppercase;
         transition: color 0.2s;
         cursor: pointer;
         vertical-align: bottom;
@@ -25,25 +22,25 @@
         }
 
         &.active {
-            color: $argo-color-teal-5;
+            color: var(--accent);
         }
 
         i {
             vertical-align: middle;
             margin-right: 4px;
-            font-size: 18px;
-            color: #aaa;
+            font-size: var(--text-xl);
+            color: var(--text-muted);
         }
 
         &:focus-visible {
-            border-radius: 4px;
-            outline: 2px solid $argo-color-teal-6;
+            border-radius: var(--radius-sm);
+
             outline-offset: -2px;
         }
     }
 
     &.transparent button {
-        color: $argo-color-teal-5;
+        color: var(--accent);
 
         &.active {
             @include themify($themes) {

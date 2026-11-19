@@ -62,6 +62,17 @@ export function WorkflowDagRenderOptionsPanel(props: WorkflowDagRenderOptions & 
                 title='Group by templateRefs'>
                 <i className='fa fa-sitemap fa-fw' />
             </a>
+            <a
+                onClick={() =>
+                    props.onChange({
+                        ...workflowDagRenderOptions(),
+                        hideHealthyNodes: !workflowDagRenderOptions().hideHealthyNodes
+                    })
+                }
+                className={workflowDagRenderOptions().hideHealthyNodes ? 'active' : ''}
+                title='Hide healthy (succeeded) nodes; their children stay connected'>
+                <i className='fa fa-filter fa-fw' />
+            </a>
         </>
     );
 }

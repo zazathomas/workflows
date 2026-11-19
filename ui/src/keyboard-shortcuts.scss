@@ -1,0 +1,48 @@
+.keyboard-shortcuts {
+    position: fixed;
+    z-index: 90;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--overlay);
+
+    &__sheet {
+        min-width: 320px;
+        padding: var(--space-4) var(--space-5);
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-xl);
+        background: var(--surface);
+        box-shadow: var(--shadow-overlay);
+        color: var(--text-primary);
+
+        h2 {
+            margin: 0 0 var(--space-3);
+            color: var(--text-strong);
+            font-size: var(--text-lg);
+            font-weight: 600;
+        }
+
+        table {
+            margin-bottom: var(--space-3);
+        }
+
+        td {
+            padding: var(--space-1) var(--space-3) var(--space-1) 0;
+            font-size: var(--text-sm);
+        }
+
+        kbd {
+            display: inline-block;
+            min-width: 26px;
+            padding: 2px 7px;
+            border: 1px solid var(--border-strong);
+            border-bottom-width: 2px;
+            border-radius: var(--radius-sm);
+            background: var(--surface-sunken);
+            font-family: var(--font-mono);
+            font-size: var(--text-xs);
+            text-align: center;
+        }
+    }
+}

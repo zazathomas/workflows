@@ -1,46 +1,51 @@
 @import 'node_modules/argo-ui/src/styles/config';
 
 .workflows-toolbar {
-    width: calc(100% - 60px);
-    background: $argo-color-gray-2;
-    padding: 0.5em 20px;
-    margin-bottom: 0.5em;
-    display: flex;
-    align-items: center;
     position: fixed;
-    right: 0px;
-    top: calc(50px * 2);
-    font-size: 15px;
     z-index: 10;
+    top: calc(2 * #{$top-bar-height});
+    right: 0;
+    display: flex;
+    width: calc(100% - 60px);
+    align-items: center;
+    margin-bottom: var(--space-2);
+    padding: var(--space-2) 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-sunken);
+    font-size: var(--text-md);
 
     &__actions {
         margin-left: auto;
         line-height: 3em;
+
         &--action {
-            cursor: pointer;
-            color: white;
-            border-radius: 3px;
-            padding: 0.5em 10px;
             margin-right: 10px;
-            background-color: $argo-color-gray-6;
+            padding: 0.5em 10px;
+            border-radius: var(--radius-sm);
+            background-color: var(--text-secondary);
+            color: var(--surface);
+            cursor: pointer;
         }
 
         button:disabled {
-            background-color: $argo-color-gray-4;
+            background-color: var(--border);
+            color: var(--text-muted);
             cursor: not-allowed;
-            color: $argo-color-gray-6;
         }
 
         &--suspend {
-            background-color: $argo-color-gray-6;
+            background-color: var(--status-neutral-mark);
+            color: var(--on-strong);
         }
 
         &--resume {
-            background-color: $argo-color-green;
+            background-color: var(--status-succeeded-mark);
+            color: var(--on-strong);
         }
 
         &--delete {
-            background-color: $argo-color-red;
+            background-color: var(--status-failed-mark);
+            color: var(--on-strong);
         }
     }
 }

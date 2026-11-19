@@ -467,6 +467,12 @@ export interface Template {
      * PodResources defines pod-level resource requests and limits for this template's pod. Overrides the workflow-level podResources.
      */
     podResources?: kubernetes.ResourceRequirements;
+
+    /**
+     * Plugin is a free-form plugin template body with exactly one key naming
+     * the plugin (for this fork, "runner" for remote runner jobs).
+     */
+    plugin?: {[key: string]: any};
     /**
      * Resource template subtype which can run k8s resources
      */
@@ -585,7 +591,7 @@ export function isArchivedWorkflow(wf?: Workflow): boolean {
     return labelValue === 'Archived' || labelValue === 'Persisted';
 }
 
-export type NodeType = 'Pod' | 'Container' | 'Steps' | 'StepGroup' | 'DAG' | 'Retry' | 'Skipped' | 'TaskGroup' | 'Suspend';
+export type NodeType = 'Pod' | 'Container' | 'Steps' | 'StepGroup' | 'DAG' | 'Retry' | 'Skipped' | 'TaskGroup' | 'Suspend' | 'HTTP' | 'Plugin';
 
 export interface NodeStatus {
     /**
@@ -792,7 +798,29 @@ export interface WorkflowStatus {
      */
     storedWorkflowTemplateSpec?: WorkflowSpec;
 
+    /**
+     * Synchronization tracks the state of mutexes and semaphores (locks) held
+     * or awaited by this workflow's nodes.
+     */
+    synchronization?: SynchronizationStatus;
+
     artifactRepositoryRef?: ArtifactRepositoryRefStatus;
+}
+
+export interface SynchronizationStatus {
+    semaphore?: LockStatus;
+    mutex?: LockStatus;
+}
+
+export interface LockStatus {
+    /**
+     * Waiting maps the node ID of a waiting step to the lock holders ahead of it.
+     */
+    waiting?: {[nodeId: string]: string[]};
+    /**
+     * Holding maps the node ID of a step to the locks it holds.
+     */
+    holding?: {[nodeId: string]: string[]};
 }
 
 export interface Condition {
@@ -1055,18 +1083,22 @@ export const NODE_PHASE = {
     OMITTED: 'Omitted'
 };
 
+// Phase marks for canvas renderers (chart.js) that cannot read the CSS custom
+// properties in `shared/theme-tokens.scss`. These values mirror the
+// `--status-*-mark` tokens and must stay in step with them.
 export function getColorForNodePhase(p: NodePhase) {
     switch (p) {
         case NODE_PHASE.ERROR:
         case NODE_PHASE.FAILED:
             return '#E96D76';
         case NODE_PHASE.PENDING:
+            return '#F4C030';
         case NODE_PHASE.RUNNING:
             return '#0DADEA';
         case NODE_PHASE.SUCCEEDED:
             return '#18BE94';
         default:
-            return '#6D7F8B';
+            return '#766F94';
     }
 }
 

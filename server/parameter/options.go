@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
 	"golang.org/x/time/rate"
 
 	"github.com/evilmonkeyinc/jsonpath"
@@ -70,6 +71,9 @@ type OptionsHandler struct {
 	allowedHosts map[string]struct{}
 	client       *http.Client
 	fetchSlots   chan struct{}
+	lookupSlots  chan struct{}
+	cacheBytes   int
+	inflight     singleflight.Group
 	mu           sync.Mutex
 	limits       map[[32]byte]*identityLimit
 	cache        map[string]cachedBody
@@ -113,6 +117,7 @@ func NewOptionsHandler(config OptionsHandlerConfig) *OptionsHandler {
 	return &OptionsHandler{
 		allowedHosts: allowedHosts,
 		fetchSlots:   make(chan struct{}, maxConcurrentFetches),
+		lookupSlots:  make(chan struct{}, maxConcurrentFetches),
 		limits:       make(map[[32]byte]*identityLimit),
 		cache:        make(map[string]cachedBody),
 		client: &http.Client{
@@ -136,81 +141,131 @@ func (h *OptionsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "only GET is supported")
 		return
 	}
-
+	if len(r.URL.RawQuery) > 16<<10 {
+		writeError(w, http.StatusRequestURITooLong, "parameter source query is too large")
+		return
+	}
 	if !h.allowIdentity(r) {
 		writeError(w, http.StatusTooManyRequests, "parameter source request limit exceeded")
 		return
 	}
-	configMapName := r.URL.Query().Get("configMapName")
-	if err := h.authorizeSource(r); err != nil {
-		writeError(w, http.StatusForbidden, err.Error())
-		return
-	}
-	if configMapName != "" {
-		h.serveConfigMap(w, r, configMapName)
-		return
-	}
-	parsedURL, err := url.Parse(r.URL.Query().Get("url"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid url")
-		return
-	}
-	if err = validateURL(parsedURL, h.allowedHosts); err != nil {
-		writeError(w, http.StatusForbidden, err.Error())
-		return
-	}
-
-	cacheKey := ""
-	if r.URL.Query().Get("secretName") == "" {
-		q := r.URL.Query()
-		cacheKey = q.Get("templateKind") + "/" + q.Get("namespace") + "/" + q.Get("templateName") + "/" + q.Get("sourceUID") + "/" + q.Get("sourceVersion") + "/" + q.Get("parameterName") + "/" + parsedURL.String()
-		if body := h.cached(cacheKey); body != nil {
-			h.writeOptions(w, r, body)
-			return
-		}
-	}
-	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, parsedURL.String(), nil)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid url")
-		return
-	}
-	if err = h.addSecretHeader(request, r); err != nil {
-		writeError(w, http.StatusForbidden, err.Error())
-		return
-	}
-
 	select {
-	case h.fetchSlots <- struct{}{}:
-		defer func() { <-h.fetchSlots }()
+	case h.lookupSlots <- struct{}{}:
 	default:
 		writeError(w, http.StatusTooManyRequests, "parameter source is busy")
 		return
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
+	defer cancel()
+	r = r.WithContext(ctx)
+	authErr := h.authorizeSource(r)
+	<-h.lookupSlots
+	if authErr != nil {
+		writeError(w, http.StatusForbidden, authErr.Error())
+		return
+	}
+	if configMapName := r.URL.Query().Get("configMapName"); configMapName != "" {
+		h.serveConfigMap(w, r, configMapName)
+		return
+	}
+	q := r.URL.Query()
+	u, err := url.Parse(q.Get("url"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid url")
+		return
+	}
+	if err = validateURL(u, h.allowedHosts); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+	writeResult := func(body []byte, err error) {
+		if err != nil {
+			var problem *fetchError
+			if errors.As(err, &problem) {
+				writeError(w, problem.status, problem.message)
+			} else {
+				writeError(w, http.StatusBadGateway, "failed to fetch parameter options")
+			}
+			return
+		}
+		writeOptionJSON(w, body)
+	}
+	if q.Get("secretName") != "" {
+		body, err := h.fetchOptions(r, u)
+		writeResult(body, err)
+		return
+	}
+	key := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join([]string{
+		q.Get("templateKind"), q.Get("namespace"), q.Get("templateName"), q.Get("sourceUID"), q.Get("sourceVersion"),
+		q.Get("parameterName"), u.String(), q.Get("itemsPath"), q.Get("labelPath"), q.Get("valuePath"),
+	}, "\x00"))))
+	if body := h.cached(key); body != nil {
+		writeOptionJSON(w, body)
+		return
+	}
+	result := h.inflight.DoChan(key, func() (any, error) {
+		if body := h.cached(key); body != nil {
+			return body, nil
+		}
+		// Another waiter may still need the result if the initiating caller disconnects.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), requestTimeout)
+		defer cancel()
+		body, err := h.fetchOptions(r.WithContext(ctx), u)
+		if err == nil {
+			h.storeCached(key, body)
+		}
+		return body, err
+	})
+	select {
+	case <-ctx.Done():
+		writeError(w, http.StatusGatewayTimeout, "parameter source timed out")
+	case fetched := <-result:
+		body, _ := fetched.Val.([]byte)
+		writeResult(body, fetched.Err)
+	}
+}
+
+type fetchError struct {
+	status  int
+	message string
+}
+
+func (e *fetchError) Error() string { return e.message }
+
+func (h *OptionsHandler) fetchOptions(r *http.Request, u *url.URL) ([]byte, error) {
+	select {
+	case h.fetchSlots <- struct{}{}:
+		defer func() { <-h.fetchSlots }()
+	default:
+		return nil, &fetchError{http.StatusTooManyRequests, "parameter source is busy"}
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, &fetchError{http.StatusBadRequest, "invalid url"}
+	}
+	if err := h.addSecretHeader(request, r); err != nil {
+		return nil, &fetchError{http.StatusForbidden, err.Error()}
+	}
 	response, err := h.client.Do(request)
 	if err != nil {
-		logging.RequireLoggerFromContext(r.Context()).WithError(err).Error(r.Context(), "failed to fetch parameter options")
-		writeError(w, http.StatusBadGateway, "failed to fetch parameter options")
-		return
+		return nil, &fetchError{http.StatusBadGateway, "failed to fetch parameter options"}
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		writeError(w, http.StatusBadGateway, fmt.Sprintf("parameter source returned HTTP %d", response.StatusCode))
-		return
+		return nil, &fetchError{http.StatusBadGateway, fmt.Sprintf("parameter source returned HTTP %d", response.StatusCode)}
 	}
-
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseSize+1))
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "failed to read parameter source")
-		return
+		return nil, &fetchError{http.StatusBadGateway, "failed to read parameter source"}
 	}
 	if len(body) > maxResponseSize {
-		writeError(w, http.StatusBadGateway, "parameter source response is too large")
-		return
+		return nil, &fetchError{http.StatusBadGateway, "parameter source response is too large"}
 	}
-
-	if h.writeOptions(w, r, body) && cacheKey != "" {
-		h.storeCached(cacheKey, body)
+	output, err := normalizedOptions(r.URL.Query(), body)
+	if err != nil {
+		return nil, &fetchError{http.StatusBadGateway, err.Error()}
 	}
+	return output, nil
 }
 
 func (h *OptionsHandler) allowIdentity(r *http.Request) bool {
@@ -250,24 +305,31 @@ func (h *OptionsHandler) cached(key string) []byte {
 	if ok && time.Now().Before(entry.expires) {
 		return entry.body
 	}
-	delete(h.cache, key)
+	if ok {
+		h.cacheBytes -= len(entry.body)
+		delete(h.cache, key)
+	}
 	return nil
 }
 
 func (h *OptionsHandler) storeCached(key string, body []byte) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if len(h.cache) >= 256 {
-		for key, entry := range h.cache {
-			if time.Now().After(entry.expires) {
-				delete(h.cache, key)
-			}
-		}
-		if len(h.cache) >= 256 {
-			return
+	const budget = 8 << 20
+	if len(body) > budget {
+		return
+	}
+	for key, entry := range h.cache {
+		if time.Now().After(entry.expires) || h.cacheBytes+len(body) > budget || len(h.cache) >= 256 {
+			h.cacheBytes -= len(entry.body)
+			delete(h.cache, key)
 		}
 	}
+	if existing, ok := h.cache[key]; ok {
+		h.cacheBytes -= len(existing.body)
+	}
 	h.cache[key] = cachedBody{body: body, expires: time.Now().Add(30 * time.Second)}
+	h.cacheBytes += len(body)
 }
 
 func (h *OptionsHandler) serveConfigMap(w http.ResponseWriter, r *http.Request, name string) {
@@ -307,20 +369,31 @@ func (h *OptionsHandler) serveConfigMap(w http.ResponseWriter, r *http.Request, 
 }
 
 func (h *OptionsHandler) writeOptions(w http.ResponseWriter, r *http.Request, body []byte) bool {
-	var document any
-	if err := json.Unmarshal(body, &document); err != nil {
-		writeError(w, http.StatusBadGateway, "parameter source did not return valid JSON")
-		return false
-	}
-	items, err := mapOptions(document, r.URL.Query().Get("itemsPath"), r.URL.Query().Get("labelPath"), r.URL.Query().Get("valuePath"))
+	encoded, err := normalizedOptions(r.URL.Query(), body)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return false
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(optionsResponse{Items: items})
+	writeOptionJSON(w, encoded)
 	return true
+}
+
+func normalizedOptions(query url.Values, body []byte) ([]byte, error) {
+	var document any
+	if err := json.Unmarshal(body, &document); err != nil {
+		return nil, errors.New("parameter source did not return valid JSON")
+	}
+	items, err := mapOptions(document, query.Get("itemsPath"), query.Get("labelPath"), query.Get("valuePath"))
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(optionsResponse{Items: items})
+}
+
+func writeOptionJSON(w http.ResponseWriter, body []byte) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(body)
 }
 
 func (h *OptionsHandler) addSecretHeader(request *http.Request, r *http.Request) error {

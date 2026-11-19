@@ -1,0 +1,43 @@
+# Apply in the approved workflow namespace (builds in this example).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: runner-executor-plugin
+  namespace: builds
+  labels:
+    workflows.argoproj.io/configmap-type: ExecutorPlugin
+data:
+  sidecar.automountServiceAccountToken: "false"
+  sidecar.container: |
+    name: runner
+    image: registry.example.com/workflows-runner-broker:replace-me
+    args: [plugin]
+    ports:
+      - containerPort: 10176
+    env:
+      - name: BROKER_URL
+        value: https://runner-broker.runner-system.svc:8443
+      - name: BROKER_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      - name: BROKER_POOL
+        value: build
+      - name: BROKER_PLUGIN_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: runner-broker-plugin
+            key: token
+    resources:
+      requests: {cpu: 20m, memory: 32Mi}
+      limits: {cpu: 250m, memory: 128Mi}
+    securityContext:
+      # Match the stock agent UID so the sidecar can read its 0440 RPC token.
+      runAsUser: 8737
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault

@@ -1,0 +1,26 @@
+# Optional argo-server test-send role. This queues intents; it grants no Secret access.
+# Use a separate worker from deploy/fork-worker/worker.yaml to deliver them.
+# Replace the workload namespace and API service account to match your installation.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-server-notification-enqueue
+  namespace: protected-workflows
+rules:
+  - apiGroups: ['']
+    resources: [configmaps]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-server-notification-enqueue
+  namespace: protected-workflows
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-server-notification-enqueue
+subjects:
+  - kind: ServiceAccount
+    name: argo-server
+    namespace: argo

@@ -11,26 +11,65 @@
     white-space: nowrap;
     cursor: pointer;
   }
+
+  &__toolbar {
+    display: flex;
+    flex-direction: column;
+    row-gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  &__toolbar-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 6px;
+  }
+
+  &__console-controls {
+    border-top: 1px solid rgba(150, 150, 150, 0.25);
+    padding-top: 8px;
+  }
+
+  &__level-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+
+    select {
+      width: auto;
+      margin: 0;
+    }
+  }
+
+  &__filter,
+  &__timezone {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  &__filter input {
+    width: 170px;
+  }
+
+  &__spacer {
+    flex: 1;
+  }
 }
 
+// The console is a terminal: dark in every theme, like any other log console
+// (GitHub Actions, Grafana, IDE terminals), so the ANSI palette reads the same
+// everywhere. Text without explicit styling is colored by the viewer itself
+// (log-colorizer), not by this background.
 .log-box {
   min-height: 500px;
   max-height: 800px;
-  padding: 10px;
-  margin: 10px;
-  background-color: white;
-}
-
-.log-menu {
-  display: flex;
-  column-gap: 12px;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.theme-dark .log-box {
-  border: 1px solid #334155;
-  background: #111827;
-  color: #e5edf5;
+  padding: 10px 14px;
+  margin: 10px 0;
+  background-color: var(--terminal-surface);
+  border: 1px solid var(--terminal-border);
+  border-radius: var(--radius-md);
 }

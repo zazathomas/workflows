@@ -1,0 +1,44 @@
+# An approval with a decision record: the step waits for a human, the
+# decision (who, comment, when) is recorded on the run, an expiry denies the
+# step automatically if nobody answers, and the scoping annotation limits who
+# may decide.
+#
+# Approve on the Approvals page resumes the run; reject fails only this step
+# (onExit and later steps still run). With client auth there are no SSO
+# groups, so adjust the approvers scope to your identity provider or rely on
+# RBAC alone (remove the annotation).
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: approval-expiry
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/description: |
+      A suspended step with an expiry, an approver scope and notifications.
+    approvals.argoproj.io/approvers: 'group:argo-admins'
+    approvals.argoproj.io/expiry: 30m
+    # Tell the on-call when the run starts waiting (docs/notifications.md):
+    # the destination must exist in the argo-notifications ConfigMap.
+    notifications.argoproj.io/triggers: 'suspended,failed'
+    notifications.argoproj.io/destinations: 'oncall-pagerduty'
+spec:
+  entrypoint: main
+  serviceAccountName: wf-runner
+  archiveLogs: false
+  templates:
+    - name: main
+      steps:
+        - - name: wait-for-approval
+            template: approve
+        - - name: after-decision
+            template: finish
+    - name: approve
+      suspend: {}
+    - name: finish
+      plugin:
+        runner:
+          pool: build
+          image: docker.io/library/busybox:1.36@sha256:650fd57367e5d6f0b5f8732f0e5d88f5d0df8e8f0b9f0e2b0f9a4b8e5f9d0a1
+          command: [sh, -c]
+          args: ['echo "approved; finishing"']
+          timeout: 2m

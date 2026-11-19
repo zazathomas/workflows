@@ -1,0 +1,70 @@
+# Apply only after migrating the dedicated PostgreSQL database.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner-broker
+  namespace: runner-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: runner-broker}
+  template:
+    metadata:
+      labels: {app: runner-broker}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: broker
+          image: registry.example.com/workflows-runner-broker:replace-me
+          args: [serve]
+          ports:
+            - name: https
+              containerPort: 8443
+          readinessProbe:
+            tcpSocket: {port: https}
+          env:
+            - name: BROKER_NAMESPACE
+              value: builds
+            - name: BROKER_POOL
+              value: build
+            - name: BROKER_CONCURRENCY
+              value: "8"
+            - name: BROKER_DATABASE_URL
+              valueFrom:
+                secretKeyRef: {name: runner-broker-database, key: url}
+            - name: BROKER_PLUGIN_TOKEN_FILE
+              value: /etc/broker-token/token
+            - name: BROKER_TLS_CERT
+              value: /etc/broker-tls/tls.crt
+            - name: BROKER_TLS_KEY
+              value: /etc/broker-tls/tls.key
+          securityContext:
+            runAsUser: 65532
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: "1", memory: 384Mi}
+          volumeMounts:
+            - {name: broker-tls, mountPath: /etc/broker-tls, readOnly: true}
+            - {name: broker-token, mountPath: /etc/broker-token, readOnly: true}
+      volumes:
+        - name: broker-tls
+          secret: {secretName: runner-broker-tls}
+        - name: broker-token
+          secret: {secretName: runner-broker-plugin}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runner-broker
+  namespace: runner-system
+spec:
+  selector: {app: runner-broker}
+  ports:
+    - {name: https, port: 8443, targetPort: https}

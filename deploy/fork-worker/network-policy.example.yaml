@@ -1,0 +1,32 @@
+# Apply only after substituting the API endpoint and intended destinations.
+# NetworkPolicy matches IPs rather than hostnames. Prefer a CNI FQDN policy
+# or a separately governed egress gateway for providers with changing IPs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: argo-fork-worker-egress
+  namespace: argo
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: argo-fork-worker
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock: {cidr: 192.0.2.10/32} # Replace with the Kubernetes API address seen by your CNI.
+      ports:
+        - {protocol: TCP, port: 443}
+    - to:
+        - ipBlock: {cidr: 198.51.100.20/32} # Replace with the authorized webhook address.
+      ports:
+        - {protocol: TCP, port: 443}

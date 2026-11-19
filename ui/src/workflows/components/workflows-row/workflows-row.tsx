@@ -9,9 +9,12 @@ import {DurationPanel} from '../../../shared/components/duration-panel';
 import {PhaseIcon} from '../../../shared/components/phase-icon';
 import {SuspenseReactMarkdownGfm} from '../../../shared/components/suspense-react-markdown-gfm';
 import {Timestamp} from '../../../shared/components/timestamp';
+import {Tooltip} from '../../../shared/components/tooltip';
 import {wfDuration} from '../../../shared/duration';
 import * as models from '../../../shared/models';
 import {isArchivedWorkflow, Workflow} from '../../../shared/models';
+import {services} from '../../../shared/services';
+import {getStartedBy, StartedBy} from '../../../shared/started-by';
 import {escapeInvalidMarkdown} from '../../utils';
 import {WorkflowDrawer} from '../workflow-drawer/workflow-drawer';
 import {OptionalColumn} from '../workflows-list/table-options';
@@ -48,6 +51,85 @@ export function WorkflowsRow(props: WorkflowsRowProps) {
 
     function renderDuration() {
         return <Ticker>{() => <DurationPanel phase={wf.status.phase} duration={wfDuration(wf.status)} estimatedDuration={wf.status.estimatedDuration} />}</Ticker>;
+    }
+
+    function copyUrl() {
+        const url = `${window.location.origin}${uiUrl(`workflows/${wf.metadata.namespace}/${wf.metadata.name}`)}?uid=${wf.metadata.uid}`;
+        navigator.clipboard?.writeText(url);
+    }
+
+    function stopRun() {
+        services.workflows.stop(wf.metadata.name, wf.metadata.namespace).catch(() => {
+            // Stop failures surface on the run's detail page; the row stays as-is.
+        });
+    }
+
+    function deleteRun() {
+        services.workflows.delete(wf.metadata.name, wf.metadata.namespace).catch(() => {
+            // Delete failures surface on the run's detail page.
+        });
+    }
+
+    /** AWX/Rundeck-style row actions: share the run, stop it while running, delete it when done. */
+    function renderQuickActions() {
+        const running = wf.status?.phase === 'Running' || wf.status?.phase === 'Pending';
+        const terminal = ['Succeeded', 'Failed', 'Error'].includes(wf.status?.phase);
+        return (
+            <div className='workflows-row__quick-actions'>
+                <button
+                    type='button'
+                    className='workflows-row__quick-action'
+                    aria-label={`Copy link to run ${wf.metadata.name}`}
+                    title='Copy link to this run'
+                    onClick={e => {
+                        e.stopPropagation();
+                        copyUrl();
+                    }}>
+                    <i className='fa fa-link' aria-hidden='true' />
+                </button>
+                {running && (
+                    <button
+                        type='button'
+                        className='workflows-row__quick-action'
+                        aria-label={`Stop run ${wf.metadata.name}`}
+                        title='Stop this run'
+                        onClick={e => {
+                            e.stopPropagation();
+                            stopRun();
+                        }}>
+                        <i className='fa fa-stop-circle' aria-hidden='true' />
+                    </button>
+                )}
+                {terminal && (
+                    <button
+                        type='button'
+                        className='workflows-row__quick-action'
+                        aria-label={`Delete run ${wf.metadata.name}`}
+                        title='Delete this run'
+                        onClick={e => {
+                            e.stopPropagation();
+                            deleteRun();
+                        }}>
+                        <i className='fa fa-trash' aria-hidden='true' />
+                    </button>
+                )}
+            </div>
+        );
+    }
+
+    function renderStartedBy(startedBy: StartedBy) {
+        if (startedBy.kind === 'unknown') {
+            return <span className='workflows-row__started-by--unknown'>-</span>;
+        }
+        return (
+            <span className='workflows-row__started-by'>
+                <Tooltip content={`Started by ${startedBy.name}`}>
+                    <span>
+                        <i className={startedBy.icon} aria-hidden='true' /> {startedBy.name}
+                    </span>
+                </Tooltip>
+            </span>
+        );
     }
 
     return (
@@ -118,6 +200,16 @@ export function WorkflowsRow(props: WorkflowsRowProps) {
                             {isArchivedWorkflow(wf) ? 'Yes' : 'No'}
                         </div>
                     )}
+                    {show('details') && (
+                        <div className='columns small-1 workflows-row__quick-actions-cell' role='cell'>
+                            {renderQuickActions()}
+                        </div>
+                    )}
+                    {show('startedBy') && (
+                        <div className='columns small-1' role='cell'>
+                            {renderStartedBy(getStartedBy(wf))}
+                        </div>
+                    )}
                     {(props.columns || []).map(column => {
                         const value = (column.type === 'label' ? wf?.metadata?.labels?.[column.key] : wf?.metadata?.annotations?.[column.key]) ?? 'unknown';
                         return (
@@ -161,6 +253,12 @@ export function WorkflowsRow(props: WorkflowsRowProps) {
                     <div>
                         <dt>Archived</dt>
                         <dd>{isArchivedWorkflow(wf) ? 'Yes' : 'No'}</dd>
+                    </div>
+                    <div>
+                        <dt>Started by</dt>
+                        <dd>
+                            <i className={getStartedBy(wf).icon} aria-hidden='true' /> {getStartedBy(wf).name || '-'}
+                        </dd>
                     </div>
                 </dl>
                 <div className='workflows-row__mobile-actions'>

@@ -46,3 +46,26 @@
     text-overflow: ellipsis;
   }
 }
+.cron-workflow-row__run-now {
+    padding: 4px 10px;
+}
+
+.cron-workflow-row__concurrency {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    line-height: 16px;
+
+    &--forbid {
+        background: var(--status-failed-soft);
+        color: var(--status-failed-text);
+    }
+
+    &--replace {
+        background: var(--status-pending-soft);
+        color: var(--status-pending-text);
+    }
+}

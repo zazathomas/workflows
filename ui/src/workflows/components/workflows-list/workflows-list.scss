@@ -1,15 +1,15 @@
 @import 'node_modules/argo-ui/src/styles/config';
 
 .workflows-list {
-    padding: 1em;
+    padding: var(--space-4);
 
     &__row-container {
         a {
-            color: $argo-color-gray-6;
+            color: var(--text-primary);
         }
 
         a:hover {
-            color: $argo-color-teal-5;
+            color: var(--accent);
         }
 
         .row {
@@ -24,11 +24,45 @@
     }
 
     &__controls {
-        margin: 0 16px 4px;
+        margin: 0 var(--space-4) var(--space-1);
+    }
+
+    // Approvals live on the Runs page (the nav badge is retired): a slim amber
+    // strip, rendered only when suspended steps are waiting on a human.
+    &__approvals-strip {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+        margin: var(--space-2) var(--space-4) 0;
+        padding: var(--space-2) var(--space-3);
+        border: 1px solid var(--status-pending-text);
+        border-radius: var(--radius-lg);
+        background: var(--status-pending-soft);
+        color: var(--status-pending-text);
+        font-size: var(--text-sm);
+        font-weight: 600;
+
+        > i {
+            flex: 0 0 auto;
+        }
+
+        a {
+            margin-left: auto;
+            color: inherit;
+            font-weight: 600;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+
+            &:hover,
+            &:focus-visible {
+                color: inherit;
+            }
+        }
     }
 
     &__results {
-        padding: 0 16px;
+        padding: 0 var(--space-4);
 
         .workflows-table {
             margin-right: 0;
@@ -40,7 +74,7 @@
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 8px;
+        gap: var(--space-2);
         min-width: 0;
 
         label {
@@ -54,17 +88,17 @@
         }
 
         small {
-            color: #526575;
+            color: var(--text-muted);
         }
 
         .workflows-list__scope {
             display: inline-block;
             padding: 2px 7px;
-            border-radius: 999px;
-            background: #e7f4f7;
-            color: #00566b;
-            font-size: 11px;
-            font-weight: 700;
+            border-radius: var(--radius-pill);
+            background: var(--accent-soft);
+            color: var(--accent-soft-text);
+            font-size: var(--text-2xs);
+            font-weight: 600;
         }
     }
 
@@ -72,22 +106,35 @@
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 8px;
-        margin: 8px 0;
+        gap: var(--space-2);
+        margin: var(--space-2) 0;
 
-        select { padding: 6px; }
-        summary { cursor: pointer; }
-        fieldset { display: flex; flex-wrap: wrap; gap: 10px; }
-        fieldset label { text-transform: capitalize; }
+        select {
+            padding: 6px;
+        }
+
+        summary {
+            cursor: pointer;
+        }
+
+        fieldset {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        fieldset label {
+            text-transform: capitalize;
+        }
     }
 
     &__status {
-        max-width: 80px;
         display: flex;
+        max-width: 80px;
         align-items: center;
 
         &--checkbox {
-            margin-right: 12px;
+            margin-right: var(--space-3);
         }
     }
 
@@ -103,22 +150,22 @@
     &__timestamp {
         display: flex;
         align-items: center;
-        white-space: nowrap !important;
         font-variant-numeric: tabular-nums;
+        white-space: nowrap !important;
         word-break: normal;
     }
 
     &__title {
-        font-weight: bolder;
-        font-size: 15px;
-        color: $argo-color-gray-6;
         padding-top: 0.25em;
         padding-bottom: 0.5em;
+        color: var(--text-strong);
+        font-size: var(--text-md);
+        font-weight: 600;
     }
 
     &__info {
         line-height: 24px;
-        margin: 1em 0;
+        margin: var(--space-4) 0;
     }
 
     &__icons {
@@ -130,42 +177,33 @@
     }
 
     &__entry {
-        padding-left: 1em;
-        border-left: 5px solid $argo-color-gray-4;
+        padding-left: var(--space-4);
+        border-left: 4px solid var(--border);
 
         // healthy statuses
-
-        &--comparison-Synced {
-            border-left-color: $argo-success-color;
-        }
-
+        &--comparison-Synced,
         &--health-Healthy {
-            border-left-color: $argo-success-color;
+            border-left-color: var(--status-succeeded-mark);
         }
 
         // having this higher up ensures that progressing takes precedence
         &--comparison-OutOfSync {
-            border-left-color: $argo-status-warning-color;
+            border-left-color: var(--status-pending-mark);
         }
 
         // intermediate statuses
-
         &--health-Progressing {
-            border-left-color: $argo-running-color;
+            border-left-color: var(--status-running-mark);
         }
 
         // failed statuses
-
-        &--health-Degraded {
-            border-left-color: $argo-failed-color;
-        }
-
+        &--health-Degraded,
         &--comparison-Error {
-            border-left-color: $argo-failed-color;
+            border-left-color: var(--status-failed-mark);
         }
 
         &--actions {
-            padding-top: 1em;
+            padding-top: var(--space-4);
         }
     }
 
@@ -177,15 +215,16 @@
     }
 
     &__filters-container {
+        position: relative;
         max-height: 2.5em;
         overflow: hidden;
-        position: relative;
-        border-radius: $border-radius;
-        box-shadow: 1px 1px 3px $argo-color-gray-5;
-        padding: 0 1em 0.75em 1em;
-        margin: 33px 0;
-        background-color: white;
-        transition: max-height 0.25s cubic-bezier(0, 1, 0, 1);
+        margin: var(--space-6) 0;
+        padding: 0 var(--space-4) 0.75em;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background-color: var(--surface);
+        box-shadow: var(--shadow-card);
+        transition: max-height 0.25s var(--ease);
 
         ul,
         a,
@@ -195,22 +234,22 @@
 
         p {
             margin-top: 1em;
-            color: $argo-color-gray-6;
-            text-transform: uppercase;
+            color: var(--text-secondary);
         }
 
         &::before {
-            content: 'FILTERS';
             display: block;
-            color: $argo-color-gray-6;
-            padding-bottom: 1em;
             margin-top: 0.5em;
+            padding-bottom: 1em;
+            color: var(--text-secondary);
+            content: 'FILTERS';
         }
 
         &--expanded {
             overflow-y: auto;
             max-height: calc(1.55em * 15);
             transition: max-height 1s ease-in-out;
+
             &::before {
                 display: none;
             }
@@ -218,17 +257,18 @@
     }
 
     &__filters-container-title {
-        border-bottom: 1px solid $argo-color-gray-3;
         margin-bottom: 1em;
+        border-bottom: 1px solid var(--border);
     }
 
     &__filter {
+        max-height: calc(1.55em * 10);
+        overflow-y: auto;
+        transition: max-height 0.25s var(--ease);
+
         li {
             list-style: none;
         }
-        max-height: calc(1.55em * 10);
-        transition: max-height 0.25s cubic-bezier(0, 1, 0, 1);
-        overflow-y: auto;
     }
 
     &__filter-expander {
@@ -237,61 +277,68 @@
 
     &__view-type {
         white-space: nowrap;
+
         i {
-            cursor: pointer;
-            color: $argo-color-gray-4;
             margin-right: 1em;
+            color: var(--text-muted);
+            cursor: pointer;
+
             &::before {
                 font-size: 1.5em;
             }
         }
+
         i.selected {
+            color: var(--accent);
             cursor: default;
-            color: $argo-color-teal-5;
         }
     }
 
     &__filter-label {
-        vertical-align: bottom;
+        display: inline-block;
         width: calc(100% - 50px);
+        margin-right: 10px;
         overflow: hidden;
         text-overflow: ellipsis;
-        display: inline-block;
+        vertical-align: bottom;
         white-space: nowrap;
-        margin-right: 10px;
     }
 
     &__table-icon {
         display: inline-block;
-        margin-right: 10px;
         width: 80px;
+        margin-right: 10px;
     }
 
     &__table-row {
+        margin-left: -30px !important;
+
         & > .columns:first-child {
             padding-left: 30px;
         }
-        margin-left: -30px !important;
     }
 
     &__search {
         position: relative;
+
         i.fa-search {
             position: absolute;
             bottom: 0.6em;
             left: -1.5em;
         }
+
         i.fa-times {
-            cursor: pointer;
             position: absolute;
-            color: $argo-color-gray-5;
-            bottom: 0.6em;
             right: 0;
+            bottom: 0.6em;
             z-index: 1;
+            color: var(--text-muted);
+            cursor: pointer;
         }
+
         .select {
             width: 100%;
-            border-radius: $border-radius;
+            border-radius: var(--radius-md);
         }
     }
 
@@ -302,10 +349,6 @@
     }
 }
 
-.theme-dark .workflows-list__sort small {
-    color: #c3d1df;
-}
-
 .workflows-list__body.pt-60 {
     padding-top: 60px;
 }
@@ -314,20 +357,29 @@
     overflow-x: auto !important;
 }
 
+// The runs table lays out thirteen columns inside a twelve-column grid. Columns
+// truncate to fit the card at every width instead of forcing a horizontal
+// scrollbar; below this floor the table itself scrolls.
 .workflows-table__content {
-    min-width: 1240px;
+    min-width: 100%;
+}
+
+@media (max-width: 1100px) {
+    .workflows-table__content {
+        min-width: 980px;
+    }
 }
 
 .workflows-table__head [role='columnheader'] {
+    font-size: var(--text-2xs);
+    letter-spacing: 0.04em;
     white-space: nowrap;
-    font-size: 11px;
-    letter-spacing: 0.02em;
 }
 
 .workflows-table__head .columns,
 .workflows-table .argo-table-list__row .columns {
-    padding-right: 8px;
-    padding-left: 8px;
+    padding-right: var(--space-2);
+    padding-left: var(--space-2);
 }
 
 .workflows-list__timestamp {
@@ -337,11 +389,12 @@
 .pagination-panel {
     display: flex;
     align-items: flex-start;
-    gap: 4px;
-    padding: 16px 0 45px;
+    gap: var(--space-1);
+    padding: var(--space-4) 0 var(--space-6);
 
     small {
         margin-left: auto;
+        color: var(--text-muted);
     }
 }
 
@@ -360,7 +413,7 @@
 
     .pagination-panel {
         flex-wrap: wrap;
-        padding-bottom: 16px;
+        padding-bottom: var(--space-4);
 
         small {
             display: flex;
@@ -368,15 +421,10 @@
             align-items: center;
             justify-content: flex-end;
             gap: 6px;
-            margin-top: 8px;
+            margin-top: var(--space-2);
             margin-left: 0;
         }
     }
-}
-
-.theme-dark .workflows-list__scope {
-    background: #164e63;
-    color: #cffafe;
 }
 
 .workflows-list__status--checkbox,
@@ -384,4 +432,15 @@
     width: 18px;
     height: 18px;
     cursor: pointer;
+}
+
+.workflows-list__view-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.workflows-list__queued-toggle.active {
+    border-color: var(--status-running-mark);
 }

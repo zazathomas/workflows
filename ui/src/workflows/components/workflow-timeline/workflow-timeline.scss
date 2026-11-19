@@ -2,7 +2,8 @@
 
 .workflow-timeline {
     position: relative;
-    background: white;
+    background: var(--canvas);
+    color: var(--text-primary);
 
     &__node-name {
         width: 250px;
@@ -14,87 +15,67 @@
 
     &__row {
         position: relative;
-        line-height: 3em;
         height: 3em;
-        border-bottom: 1px solid $argo-color-gray-4;
+        border-bottom: 1px solid var(--border);
+        line-height: 3em;
 
         &--header {
-            background-color: $argo-color-gray-3;
             height: 59px;
+            background-color: var(--surface-sunken);
         }
 
         &--selected {
-            background-color: rgba($argo-color-teal-3, 0.2);
+            background-color: var(--surface-selected);
         }
     }
 
     &__node {
-        z-index: 2;
         position: absolute;
+        z-index: 2;
         top: 0;
         bottom: 0;
-        &--error, &--failed {
-            background-color: $argo-failed-color;
+
+        &--error,
+        &--failed {
+            background-color: var(--status-failed-mark);
         }
 
         &--running {
-            background-color: $argo-running-color;
+            background-color: var(--status-running-mark);
         }
-   
+
         &--succeeded {
-            background-color: $argo-success-color;
+            background-color: var(--status-succeeded-mark);
         }
 
-        &--skipped {
-            background-color: $argo-color-gray-4;
-        }
-
+        &--skipped,
         &--omitted {
-            background-color: $argo-color-gray-4;
+            background-color: var(--status-neutral-mark);
         }
     }
 
     &__start-line {
-        z-index: 1;
         position: absolute;
+        z-index: 1;
         top: 0;
         bottom: 0;
         width: 0;
-        border-right: 1px solid $argo-color-gray-4;
+        border-right: 1px solid var(--border-strong);
 
         &__time {
-            left: -2.5em;
-            font-size: 0.8em;
             position: absolute;
-            color: $argo-color-gray-5;
-        }
-    }
-    &__node, &__start-line {
-        transition: left 0.2s, top 0.2s, width 0.2s, height 0.2s;
-    }
-}
-
-.theme-dark .workflow-timeline {
-    background: #111827;
-    color: #e5edf5;
-
-    &__row {
-        border-bottom-color: #475569;
-
-        &--header {
-            background: #273548;
-        }
-
-        &--selected {
-            background: rgba(20, 184, 166, 0.16);
+            left: -2.5em;
+            color: var(--text-muted);
+            font-size: var(--text-xs);
         }
     }
 
+    &__node,
     &__start-line {
-        border-right-color: #64748b;
-
-        &__time {
-            color: #c6d5e3;
-        }
+        transition:
+            left 0.2s,
+            top 0.2s,
+            width 0.2s,
+            height 0.2s;
     }
 }

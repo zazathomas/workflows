@@ -1,35 +1,23 @@
 .submit-workflow-panel__review {
-    margin-bottom: 25px;
-    padding: 12px 16px;
-    border: 1px solid #dce6ec;
-    border-radius: 8px;
-    background: #f7fbfc;
+    margin-bottom: var(--space-5);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-sunken);
 
     h4 {
-        margin: 0 0 8px;
-        color: #526575;
-        font-size: 13px;
+        margin: 0 0 var(--space-2);
+        color: var(--text-secondary);
+        font-size: var(--text-xs);
         font-weight: 600;
+        letter-spacing: 0.04em;
         text-transform: uppercase;
     }
 
     p {
         margin: 2px 0;
-        color: #334155;
-        font-size: 13px;
+        color: var(--text-primary);
+        font-size: var(--text-sm);
         word-break: break-word;
-    }
-}
-
-.theme-dark .submit-workflow-panel__review {
-    border-color: #334155;
-    background: #1f2937;
-
-    h4 {
-        color: #c6d5e3;
-    }
-
-    p {
-        color: #e5edf5;
     }
 }

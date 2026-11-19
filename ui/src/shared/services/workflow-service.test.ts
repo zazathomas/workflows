@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  */
-import {firstValueFrom, of} from 'rxjs';
+import {firstValueFrom, of, throwError, toArray} from 'rxjs';
 
 import {Workflow} from '../models';
 import requests from './requests';
@@ -198,4 +198,106 @@ describe('workflow service', () => {
         expect(getArtifactLogs).toHaveBeenCalledWith(completedWorkflow, 'test-node', 'step-1', '', false);
         expect(getClusterLogs).not.toHaveBeenCalled();
     });
+
+    test('getContainerLogs aggregates the archived logs of every node in the all-pods view', async () => {
+        const multiNodeWorkflow = {
+            ...workflow('test-workflow-1', 'argo', 'test-uid'),
+            status: {
+                phase: 'Succeeded',
+                nodes: {
+                    'node-a': {id: 'node-a', phase: 'Succeeded', type: 'Pod', templateName: 'step', displayName: 'Step A', outputs: {artifacts: [{name: 'main-logs'}]}},
+                    'node-b': {id: 'node-b', phase: 'Succeeded', type: 'Pod', templateName: 'step', displayName: 'Step B', outputs: {artifacts: [{name: 'main-logs'}]}},
+                    'node-c': {id: 'node-c', phase: 'Succeeded', type: 'Pod', templateName: 'step'}
+                }
+            }
+        } as unknown as Workflow;
+        jest.spyOn(service, 'get').mockResolvedValue(multiNodeWorkflow);
+        const getArtifactLogs = jest
+            .spyOn(service, 'getContainerLogsFromArtifact')
+            .mockImplementation((_wf, nodeId) => of({content: `from artifact ${nodeId}`, podName: nodeId === 'node-a' ? 'Step A' : 'Step B'}));
+        const getClusterLogs = jest.spyOn(service, 'getContainerLogsFromCluster').mockReturnValue(of({content: 'from cluster', podName: 'test-pod'}));
+
+        // the all-pods view passes no pod name and no node id
+        const entries = await firstValueFrom(service.getContainerLogs(multiNodeWorkflow, '', undefined, 'main', '', false).pipe(toArray()));
+
+        // node-c archived no logs, so only node-a and node-b contribute, in node order
+        expect(entries.map(e => e.content)).toEqual(['from artifact node-a', 'from artifact node-b']);
+        expect(entries.map(e => e.podName)).toEqual(['Step A', 'Step B']);
+        expect(getArtifactLogs).toHaveBeenCalledTimes(2);
+        expect(getClusterLogs).not.toHaveBeenCalled();
+    });
+
+    test('getContainerLogs skips nodes whose archived logs cannot be fetched in the all-pods view', async () => {
+        const multiNodeWorkflow = {
+            ...workflow('test-workflow-1', 'argo', 'test-uid'),
+            status: {
+                phase: 'Succeeded',
+                nodes: {
+                    'node-a': {id: 'node-a', phase: 'Succeeded', type: 'Pod', templateName: 'step', displayName: 'Step A', outputs: {artifacts: [{name: 'main-logs'}]}},
+                    'node-b': {id: 'node-b', phase: 'Succeeded', type: 'Pod', templateName: 'step', displayName: 'Step B', outputs: {artifacts: [{name: 'main-logs'}]}}
+                }
+            }
+        } as unknown as Workflow;
+        jest.spyOn(service, 'get').mockResolvedValue(multiNodeWorkflow);
+        const getArtifactLogs = jest
+            .spyOn(service, 'getContainerLogsFromArtifact')
+            .mockImplementation((_wf, nodeId) =>
+                nodeId === 'node-a' ? throwError(() => new Error('artifact not found')) : of({content: 'from artifact node-b', podName: 'Step B'})
+            );
+        jest.spyOn(service, 'getContainerLogsFromCluster').mockReturnValue(of({content: 'from cluster', podName: 'test-pod'}));
+
+        const entries = await firstValueFrom(service.getContainerLogs(multiNodeWorkflow, '', undefined, 'main', '', false).pipe(toArray()));
+
+        // one missing artifact must not hide the logs that are readable
+        expect(entries.map(e => e.content)).toEqual(['from artifact node-b']);
+        expect(getArtifactLogs).toHaveBeenCalledTimes(2);
+    });
+
+    test('getContainerLogs falls back to live pod logs when no node archived logs in the all-pods view', async () => {
+        const noArtifactsWorkflow = {
+            ...workflow('test-workflow-1', 'argo', 'test-uid'),
+            status: {
+                phase: 'Succeeded',
+                nodes: {
+                    'node-a': {id: 'node-a', phase: 'Succeeded', type: 'Pod', templateName: 'step', displayName: 'Step A'}
+                }
+            }
+        } as unknown as Workflow;
+        jest.spyOn(service, 'get').mockResolvedValue(noArtifactsWorkflow);
+        const getArtifactLogs = jest.spyOn(service, 'getContainerLogsFromArtifact').mockReturnValue(of({content: 'from artifact', podName: 'test-pod'}));
+        const getClusterLogs = jest.spyOn(service, 'getContainerLogsFromCluster').mockReturnValue(of({content: 'from cluster', podName: 'test-pod'}));
+
+        const log = await firstValueFrom(service.getContainerLogs(noArtifactsWorkflow, '', undefined, 'main', '', false));
+
+        expect(log.content).toBe('from cluster');
+        expect(getArtifactLogs).not.toHaveBeenCalled();
+        expect(getClusterLogs).toHaveBeenCalledWith(noArtifactsWorkflow, '', 'main', '');
+    });
+
+    test('getContainerLogs reads archived logs across all nodes for a workflow deleted from the cluster', async () => {
+        const persistedWorkflow = {
+            ...workflow('test-workflow-1', 'argo', 'test-uid'),
+            metadata: {...workflow('test-workflow-1', 'argo', 'test-uid').metadata, labels: {'workflows.argoproj.io/workflow-archiving-status': 'Persisted'}},
+            status: {
+                phase: 'Succeeded',
+                nodes: {
+                    'node-a': {id: 'node-a', phase: 'Succeeded', type: 'Pod', templateName: 'step', displayName: 'Step A', outputs: {artifacts: [{name: 'main-logs'}]}},
+                    'node-b': {id: 'node-b', phase: 'Succeeded', type: 'Pod', templateName: 'step', displayName: 'Step B', outputs: {artifacts: [{name: 'main-logs'}]}}
+                }
+            }
+        } as unknown as Workflow;
+        const getSpy = jest.spyOn(service, 'get').mockResolvedValue(persistedWorkflow);
+        jest.spyOn(service, 'getContainerLogsFromArtifact').mockImplementation((_wf, nodeId) =>
+            of({content: `from artifact ${nodeId}`, podName: nodeId === 'node-a' ? 'Step A' : 'Step B'})
+        );
+        const getClusterLogs = jest.spyOn(service, 'getContainerLogsFromCluster').mockReturnValue(of({content: 'from cluster', podName: 'test-pod'}));
+
+        const entries = await firstValueFrom(service.getContainerLogs(persistedWorkflow, '', undefined, 'main', '', false).pipe(toArray()));
+
+        expect(entries.map(e => e.content)).toEqual(['from artifact node-a', 'from artifact node-b']);
+        // the workflow is not in the cluster: no live lookup, no live pod logs
+        expect(getSpy).not.toHaveBeenCalled();
+        expect(getClusterLogs).not.toHaveBeenCalled();
+    });
+
 });

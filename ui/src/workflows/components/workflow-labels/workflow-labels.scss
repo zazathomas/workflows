@@ -6,13 +6,13 @@
   align-items: center;
   height: 100%;
   $gutter: 0.5em;
-  border-radius: 0 0 3px 3px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 
   .tag {
     line-height: normal;
-    background-color: $argo-color-gray-3;
+    background-color: var(--surface-sunken);
     border: 0;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     padding: 0;
     font: inherit;
     height: auto;
@@ -23,7 +23,7 @@
     cursor: pointer;
 
     &:focus-visible {
-      outline: 2px solid #005f73;
+
       outline-offset: 2px;
     }
 
@@ -36,12 +36,12 @@
     }
 
     .key {
-      color: #374d5a;
+      color: var(--text-secondary);
     }
 
     .value {
-      color: white;
-      background-color: #006a7d;
+      color: var(--accent-soft-text);
+      background-color: var(--accent-soft);
     }
   }
 }

@@ -33,9 +33,12 @@ const (
   startedat timestamp,
   finishedat timestamp,
   workflow text,
+  resourceversion text not null,
+  gates integer not null,
   primary key (uid)
 );
 create index if not exists idx_instanceid on argo_workflows (instanceid);
+create index if not exists idx_approval_gates on argo_workflows(namespace, gates) where gates != 0;
 create table if not exists argo_workflows_labels (
   uid varchar(128) not null,
   name varchar(317) not null,
@@ -45,7 +48,7 @@ create table if not exists argo_workflows_labels (
 );
 create index if not exists idx_name_value on argo_workflows_labels (name, value);
 `
-	insertWorkflowQuery      = `insert into argo_workflows (uid, instanceid, name, namespace, phase, startedat, finishedat, workflow) values (?, ?, ?, ?, ?, ?, ?, ?)`
+	insertWorkflowQuery      = `insert into argo_workflows (uid, instanceid, name, namespace, phase, startedat, finishedat, workflow, resourceversion, gates) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	insertWorkflowLabelQuery = `insert into argo_workflows_labels (uid, name, value) values (?, ?, ?)`
 	deleteWorkflowQuery      = `delete from argo_workflows where uid = ?`
 )
@@ -76,6 +79,7 @@ type SQLiteStore struct {
 	conn            *sqlite.Conn
 	instanceService instanceid.Service
 	mtx             sync.Mutex
+	synced          bool
 }
 
 var _ WorkflowStore = &SQLiteStore{}
@@ -199,7 +203,7 @@ func (s *SQLiteStore) Delete(obj any) error {
 	return sqlitex.Execute(s.conn, deleteWorkflowQuery, &sqlitex.ExecOptions{Args: []any{string(wf.UID)}})
 }
 
-func (s *SQLiteStore) Replace(list []any, resourceVersion string) error {
+func (s *SQLiteStore) Replace(list []any, resourceVersion string) (err error) {
 	wfs := make([]*wfv1.Workflow, 0, len(list))
 	for _, obj := range list {
 		wf, ok := obj.(*wfv1.Workflow)
@@ -211,9 +215,13 @@ func (s *SQLiteStore) Replace(list []any, resourceVersion string) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	done := sqlitex.Transaction(s.conn)
-	err := s.replaceWorkflows(wfs)
-	defer done(&err)
-	return err
+	defer func() {
+		done(&err)
+		if err == nil {
+			s.synced = true
+		}
+	}()
+	return s.replaceWorkflows(wfs)
 }
 
 func (s *SQLiteStore) Resync() error {
@@ -252,7 +260,7 @@ func (s *SQLiteStore) upsertWorkflow(wf *wfv1.Workflow) error {
 	}
 	err = sqlitex.Execute(s.conn, insertWorkflowQuery,
 		&sqlitex.ExecOptions{
-			Args: []any{string(wf.UID), s.instanceService.InstanceID(), wf.Name, wf.Namespace, wf.Status.Phase, wf.Status.StartedAt.Time, wf.Status.FinishedAt.Time, string(workflow)},
+			Args: []any{string(wf.UID), s.instanceService.InstanceID(), wf.Name, wf.Namespace, wf.Status.Phase, wf.Status.StartedAt.Time, wf.Status.FinishedAt.Time, string(workflow), wf.ResourceVersion, gateCount(wf)},
 		},
 	)
 	if err != nil {
@@ -310,6 +318,8 @@ func (s *SQLiteStore) replaceWorkflows(workflows []*wfv1.Workflow) error {
 			return err
 		}
 		stmt.BindText(8, string(workflow))
+		stmt.BindText(9, wf.ResourceVersion)
+		stmt.BindInt64(10, gateCount(wf))
 		if _, err = stmt.Step(); err != nil {
 			return err
 		}

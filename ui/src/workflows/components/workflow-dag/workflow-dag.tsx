@@ -15,6 +15,7 @@ export interface WorkflowDagRenderOptions {
     showArtifacts: boolean;
     showInvokingTemplateName: boolean;
     showTemplateRefsGrouping: boolean;
+    hideHealthyNodes: boolean;
 }
 
 interface WorkflowDagProps {
@@ -25,6 +26,11 @@ interface WorkflowDagProps {
     nodeSize?: number;
     hideOptions?: boolean;
     nodeClicked?: (nodeId: string) => any;
+}
+
+/** A node is noise for the hide-healthy filter when it finished cleanly. */
+export function isHealthyNode(n: NodeStatus, workflowRootId: string): boolean {
+    return n && n.id !== workflowRootId && n.phase === 'Succeeded';
 }
 
 function progress(n: NodeStatus) {
@@ -57,7 +63,8 @@ export class WorkflowDag extends React.Component<WorkflowDagProps, WorkflowDagRe
             expandNodes: new Set(),
             showArtifacts: localStorage.getItem('showArtifacts') !== 'false',
             showInvokingTemplateName: localStorage.getItem('showInvokingTemplateName') === 'true',
-            showTemplateRefsGrouping: localStorage.getItem('showTemplateRefsGrouping') === 'true'
+            showTemplateRefsGrouping: localStorage.getItem('showTemplateRefsGrouping') === 'true',
+            hideHealthyNodes: localStorage.getItem('hideHealthyNodes') === 'true'
         };
     }
 
@@ -117,6 +124,7 @@ export class WorkflowDag extends React.Component<WorkflowDagProps, WorkflowDagRe
         localStorage.setItem('showArtifacts', newChanges.showArtifacts ? 'true' : 'false');
         localStorage.setItem('showInvokingTemplateName', newChanges.showInvokingTemplateName ? 'true' : 'false');
         localStorage.setItem('showTemplateRefsGrouping', newChanges.showTemplateRefsGrouping ? 'true' : 'false');
+        localStorage.setItem('hideHealthyNodes', newChanges.hideHealthyNodes ? 'true' : 'false');
         this.setState(newChanges);
     }
 
@@ -157,17 +165,20 @@ export class WorkflowDag extends React.Component<WorkflowDagProps, WorkflowDagRe
 
             return allNodes[nodeId].children.filter(child => allNodes[child]);
         };
-        const pushChildren = (nodeId: string, isExpanded: boolean, queue: PrepareNode[]): void => {
+        // parentOverride re-parents the children of a healthy node that the
+        // hide-healthy filter removed: the graph stays connected through it.
+        const pushChildren = (nodeId: string, isExpanded: boolean, queue: PrepareNode[], parentOverride?: string): void => {
             const children: string[] = getChildren(nodeId);
             if (!children) {
                 return;
             }
+            const parentId = parentOverride ?? nodeId;
 
             if (children.length > 3 && !isExpanded) {
                 // Node will be collapsed
                 queue.push({
                     nodeName: children[0],
-                    parent: nodeId,
+                    parent: parentId,
                     children: getChildren(children[0])
                 });
                 const newChildren: string[] = children
@@ -176,22 +187,22 @@ export class WorkflowDag extends React.Component<WorkflowDagProps, WorkflowDagRe
                     .reduce((a, b) => a.concat(b), []);
                 queue.push({
                     nodeName: getCollapsedNodeName(nodeId, children.length - 2 + ' hidden nodes', allNodes[children[0]].type),
-                    parent: nodeId,
+                    parent: parentId,
                     children: newChildren
                 });
                 queue.push({
                     nodeName: children[children.length - 1],
-                    parent: nodeId,
+                    parent: parentId,
                     children: getChildren(children[children.length - 1])
                 });
             } else {
                 // Node will not be collapsed if no templateRefs are present
                 children.map(child => {
-                    let parentNodeId = nodeId;
+                    let parentNodeId = parentId;
                     let nodeName = child;
 
                     if (allNodes[nodeId].templateRef && this.state.showTemplateRefsGrouping) {
-                        parentNodeId = allNodes[child].boundaryID;
+                        parentNodeId = parentOverride ?? allNodes[child].boundaryID;
                         nodeName = !isExpanded ? getCollapsedNodeName(nodeId, `template:${allNodes[nodeId].templateRef.name}`, allNodes[child].type) : child;
                     }
 
@@ -230,6 +241,17 @@ export class WorkflowDag extends React.Component<WorkflowDagProps, WorkflowDagRe
                     continue;
                 }
                 const isExpanded: boolean = this.state.expandNodes.has('*') || this.state.expandNodes.has(item.nodeName);
+
+                // Hide-healthy (Rundeck "hide healthy nodes"): a cleanly
+                // finished step is noise on a big graph; its children are
+                // re-parented so the flow stays connected.
+                if (this.state.hideHealthyNodes && isHealthyNode(child, this.props.workflowName) && item.parent !== '') {
+                    if (!consideredChildren.has(item.nodeName)) {
+                        consideredChildren.add(item.nodeName);
+                        pushChildren(child.id, isExpanded, queue, item.parent);
+                    }
+                    continue;
+                }
 
                 nodes.set(item.nodeName, this.nodeLabel(child));
                 edges.set({v: item.parent, w: item.nodeName}, {});

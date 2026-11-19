@@ -62,6 +62,40 @@ const (
 	// the strategy whose artifacts are being deleted
 	AnnotationKeyArtifactGCStrategy = workflow.WorkflowFullName + "/artifact-gc-strategy"
 
+	// Fork job-control annotations (docs/job-concurrency.md, docs/approvals.md).
+	// They live on the Job (the submitted template) and are copied onto the
+	// workflow by the server submit path, so the dispatcher and the UI can
+	// read them from the workflow alone.
+	//
+	// AnnotationKeyMaxConcurrentRuns caps how many runs of one Job hold
+	// runner jobs at once ("3"). The server submit path injects the
+	// equivalent workflow-level synchronization mutex; the dispatcher
+	// enforces the same count from claim leases, so a workflow created
+	// outside the submit path (kubectl apply) cannot bypass it.
+	AnnotationKeyMaxConcurrentRuns = workflow.WorkflowFullName + "/max-concurrent-runs"
+	// AnnotationKeyOnConflict says what a submit does while the Job is
+	// already at its cap: "queue" (default, wait on the mutex), "replace"
+	// (cancel the previous run) or "reject".
+	AnnotationKeyOnConflict = workflow.WorkflowFullName + "/on-conflict"
+	// AnnotationKeyApprovalApprovers scopes who may decide a suspended step
+	// (comma-separated "group:eng-leads,user:alice,email:b@example.com");
+	// empty means anyone who may update the workflow (RBAC only).
+	AnnotationKeyApprovalApprovers = "approvals.argoproj.io/approvers"
+	// AnnotationKeyApprovalExpiry auto-denies a suspended step still waiting
+	// after the duration ("30m").
+	AnnotationKeyApprovalExpiry = "approvals.argoproj.io/expiry"
+	// AnnotationKeyApprovalAutoApproveAfter auto-approves a suspended step
+	// still waiting after the duration ("2h"); a set expiry still denies
+	// first, so set it later than the expiry if both are used.
+	AnnotationKeyApprovalAutoApproveAfter = "approvals.argoproj.io/auto-approve-after"
+	// AnnotationKeyApprovalDecisions records approval decisions on the
+	// workflow: JSON map of node ID to {decision, approver, comment, at}.
+	AnnotationKeyApprovalDecisions = "approvals.argoproj.io/decisions"
+	// AnnotationPrefixNotifications opts a Job's runs into notifications
+	// (docs/notifications.md): destinations, triggers, per-trigger
+	// destination overrides, max-duration and suppress-success.
+	AnnotationPrefixNotifications = "notifications.argoproj.io/"
+
 	// LabelParallelismLimit is a label applied on namespace objects to control the per namespace parallelism.
 	LabelParallelismLimit = workflow.WorkflowFullName + "/parallelism-limit"
 

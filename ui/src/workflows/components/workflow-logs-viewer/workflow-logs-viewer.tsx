@@ -1,6 +1,6 @@
 import {Autocomplete} from 'argo-ui/src/components/autocomplete/autocomplete';
 import * as React from 'react';
-import {useContext, useEffect, useState} from 'react';
+import {useContext, useEffect, useRef, useState} from 'react';
 import {Observable} from 'rxjs';
 import {filter, map, publishReplay, refCount, tap} from 'rxjs/operators';
 
@@ -19,11 +19,16 @@ import {useLocalStorage} from '../../../shared/use-local-storage';
 import {isArgoRuntimeLog} from './argo-runtime-log';
 import {FullHeightLogsViewer} from './full-height-logs-viewer';
 import {extractJsonValue, JsonLogsFieldSelector, SelectedJsonFields} from './json-logs-field-selector';
+import {colorizeLogLine, detectLogLevel, highlightMatches, MinimumLevel, passesLevelFilter} from './log-colorizer';
 
 const TZ_LOCALSTORAGE_KEY = 'DEFAULT_TZ';
 const VERBOSE_LOGS_LOCALSTORAGE_KEY = 'SHOW_VERBOSE_POD_LOGS';
 const DEFAULT_TZ = process.env.DEFAULT_TZ || 'UTC';
 const timezones = Intl.supportedValuesOf('timeZone');
+// the plain (unstyled) lines kept for copy/download; the terminal keeps its
+// own scrollback, this only bounds the extra copy
+const MAX_PLAIN_LOG_LINES = 100000;
+const COPY_FEEDBACK_MS = 1500;
 
 interface WorkflowLogsViewerProps {
     workflow: models.Workflow;
@@ -86,6 +91,12 @@ export function WorkflowLogsViewer({workflow, initialNodeId, initialPodName, con
     const [error, setError] = useState<Error>();
     const [loaded, setLoaded] = useState(false);
     const [logSource, setLogSource] = useState<{key: string; observable: Observable<string>}>();
+    // minimum severity shown in the console; deliberately not persisted, so the
+    // console always opens showing everything the container printed
+    const [levelFilter, setLevelFilter] = useState<MinimumLevel>('all');
+    const [copied, setCopied] = useState(false);
+    // the plain (unstyled) lines of the current stream, kept for copy/download
+    const plainLogLines = useRef<string[]>([]);
     const [showVerbosePodLogs, setShowVerbosePodLogs] = useState(() => {
         try {
             return window.localStorage.getItem(VERBOSE_LOGS_LOCALSTORAGE_KEY) === 'true';
@@ -139,9 +150,11 @@ export function WorkflowLogsViewer({workflow, initialNodeId, initialPodName, con
     useEffect(() => {
         setError(null);
         setLoaded(false);
+        plainLogLines.current = [];
         const source = services.workflows.getContainerLogs(workflow, podName, nodeId, selectedContainer, grep, archived).pipe(
             tap(() => setLoaded(true)),
             filter(e => showVerbosePodLogs || !isArgoRuntimeLog(e.content || '')),
+            filter(e => passesLevelFilter(detectLogLevel(e.content), levelFilter)),
             // extract message from LogEntry
             map(e => {
                 const values: string[] = [];
@@ -164,14 +177,18 @@ export function WorkflowLogsViewer({workflow, initialNodeId, initialPodName, con
                 }
                 return `${!podName ? e.podName + ': ' : ''}${values.join(' ')}\n`;
             }),
-            // this next line highlights the search term in bold with a yellow background, white text
-            map(x => {
-                if (grep !== '') {
-                    return x.replace(new RegExp(grep, 'g'), y => '\u001b[1m\u001b[43;1m\u001b[37m' + y + '\u001b[0m');
+            tap(line => {
+                plainLogLines.current.push(line);
+                if (plainLogLines.current.length > MAX_PLAIN_LOG_LINES) {
+                    plainLogLines.current.shift();
                 }
-                return x;
             }),
             map((x: string) => parseAndTransform(x, timezone)),
+            // style the line for the console (timestamps, severity, pod prefix) and
+            // highlight the search term in bold on yellow — without matching the
+            // styling escapes. The visible text is unchanged. (One operator, to
+            // stay within rxjs' nine typed pipe() overloads.)
+            map(x => highlightMatches(colorizeLogLine(x, {podPrefix: !podName}), grep)),
             publishReplay(),
             refCount()
         );
@@ -196,12 +213,13 @@ export function WorkflowLogsViewer({workflow, initialNodeId, initialPodName, con
                 archived,
                 selectedJsonFields.values,
                 timezone,
-                showVerbosePodLogs
+                showVerbosePodLogs,
+                levelFilter
             ]),
             observable: source
         });
         return () => subscription.unsubscribe();
-    }, [workflow.metadata.namespace, workflow.metadata.name, podName, nodeId, selectedContainer, grep, archived, selectedJsonFields, timezone, showVerbosePodLogs]);
+    }, [workflow.metadata.namespace, workflow.metadata.name, podName, nodeId, selectedContainer, grep, archived, selectedJsonFields, timezone, showVerbosePodLogs, levelFilter]);
 
     useEffect(() => {
         if (!node || !node.templateRef) {
@@ -264,6 +282,49 @@ export function WorkflowLogsViewer({workflow, initialNodeId, initialPodName, con
         }
     }
 
+    async function copyLogs() {
+        const text = plainLogLines.current.join('');
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+            } else {
+                // non-secure contexts (plain http off localhost) have no clipboard
+                // API; fall back to the legacy copy so the button still works
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+            }
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), COPY_FEEDBACK_MS);
+        } catch (err) {
+            setError(new Error('Could not copy the logs: ' + (err as Error).message));
+        }
+    }
+
+    function downloadLogs() {
+        const blob = new Blob([plainLogLines.current.join('')], {type: 'text/plain'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${workflow.metadata.name}-${podName || 'all-pods'}-${selectedContainer}.log`;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // Semaphore-style raw log: the unprocessed lines in a plain-text tab. For a
+    // running pod this is a snapshot of what has streamed so far.
+    function openRawLogs() {
+        const blob = new Blob([plainLogLines.current.join('')], {type: 'text/plain'});
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+
     return (
         <div className='workflow-logs-viewer'>
             <h3>Logs</h3>
@@ -272,46 +333,66 @@ export function WorkflowLogsViewer({workflow, initialNodeId, initialPodName, con
                     <i className='fa fa-exclamation-triangle' /> Logs for archived workflows may be overwritten by a more recent workflow with the same name.
                 </p>
             )}
-            <div style={{marginBottom: 10}}>
-                <i className='fa fa-box' />{' '}
-                <Autocomplete
-                    items={podNames}
-                    value={(podNames.find(x => x.value === podName) || {label: ''}).label}
-                    onSelect={(_, item) => {
-                        setPodName(item.value);
-                    }}
-                />{' '}
-                /{' '}
-                <Autocomplete
-                    items={containers}
-                    value={candidateContainer}
-                    onSelect={v => {
-                        setCandidateContainer(v);
-                        setContainer(v);
-                    }}
-                    onChange={v => setCandidateContainer(v.target.value)}
-                    renderInput={props => (
+            <div className='workflow-logs-viewer__toolbar' aria-label='Logs controls'>
+                <div className='workflow-logs-viewer__toolbar-row'>
+                    <i className='fa fa-box' aria-hidden='true' />{' '}
+                    <Autocomplete
+                        items={podNames}
+                        value={(podNames.find(x => x.value === podName) || {label: ''}).label}
+                        onSelect={(_, item) => {
+                            setPodName(item.value);
+                        }}
+                    />{' '}
+                    /{' '}
+                    <Autocomplete
+                        items={containers}
+                        value={candidateContainer}
+                        onSelect={v => {
+                            setCandidateContainer(v);
+                            setContainer(v);
+                        }}
+                        onChange={v => setCandidateContainer(v.target.value)}
+                        renderInput={props => (
+                            <input
+                                {...props}
+                                onKeyUp={event => {
+                                    if (event.keyCode === 13) {
+                                        // ENTER, to confirm custom container name input
+                                        setContainer(candidateContainer);
+                                    }
+                                }}
+                            />
+                        )}
+                    />
+                    <Button onClick={popupJsonFieldSelector} icon={'exchange-alt'} title={'Choose which JSON fields to display'}>
+                        Log Fields
+                    </Button>
+                    <label className='workflow-logs-viewer__verbose-toggle'>
+                        <input type='checkbox' checked={showVerbosePodLogs} onChange={event => toggleVerbosePodLogs(event.target.checked)} /> Show verbose pod logs
+                    </label>
+                </div>
+                <div className='workflow-logs-viewer__toolbar-row workflow-logs-viewer__console-controls'>
+                    <label className='workflow-logs-viewer__level-filter'>
+                        Level{' '}
+                        <select value={levelFilter} onChange={event => setLevelFilter(event.target.value as MinimumLevel)} aria-label='Minimum log level'>
+                            <option value='all'>All</option>
+                            <option value='info'>Info &amp; above</option>
+                            <option value='warn'>Warnings &amp; above</option>
+                            <option value='error'>Errors &amp; above</option>
+                        </select>
+                    </label>
+                    <span className='workflow-logs-viewer__filter'>
+                        <i className='fa fa-filter' aria-hidden='true' />{' '}
                         <input
-                            {...props}
-                            onKeyUp={event => {
-                                if (event.keyCode === 13) {
-                                    // ENTER, to confirm custom container name input
-                                    setContainer(candidateContainer);
-                                }
-                            }}
+                            type='search'
+                            defaultValue={grep}
+                            onChange={v => setDebouncedGrep(v.target.value)}
+                            placeholder='Filter (regexp)...'
+                            aria-label='Filter logs (regular expression)'
                         />
-                    )}
-                />
-                <Button onClick={popupJsonFieldSelector} icon={'exchange-alt'}>
-                    Log Fields
-                </Button>
-                <label className='workflow-logs-viewer__verbose-toggle'>
-                    <input type='checkbox' checked={showVerbosePodLogs} onChange={event => toggleVerbosePodLogs(event.target.checked)} /> Show verbose pod logs
-                </label>
-                <span className='fa-pull-right'>
-                    <div className='log-menu'>
-                        <i className='fa fa-filter' /> <input type='search' defaultValue={grep} onChange={v => setDebouncedGrep(v.target.value)} placeholder='Filter (regexp)...' />
-                        <i className='fa fa-globe' />{' '}
+                    </span>
+                    <span className='workflow-logs-viewer__timezone'>
+                        <i className='fa fa-globe' aria-hidden='true' />{' '}
                         <Autocomplete
                             items={filteredTimezones}
                             value={uiTimezone}
@@ -319,8 +400,18 @@ export function WorkflowLogsViewer({workflow, initialNodeId, initialPodName, con
                             // useEffect ensures UITimezone is also changed
                             onSelect={setTimezone}
                         />
-                    </div>
-                </span>
+                    </span>
+                    <span className='workflow-logs-viewer__spacer' />
+                    <Button outline onClick={copyLogs} icon={'copy'} title={'Copy the logs to the clipboard'}>
+                        {copied ? 'Copied!' : 'Copy'}
+                    </Button>
+                    <Button outline onClick={downloadLogs} icon={'download'} title={'Download the logs as a file'}>
+                        Download
+                    </Button>
+                    <Button outline onClick={openRawLogs} icon={'external-link-alt'} title={'Open the unprocessed log output in a new tab'}>
+                        Raw
+                    </Button>
+                </div>
             </div>
             <ErrorNotice error={error} />
             {!loaded || !logSource ? (

@@ -2,35 +2,21 @@
 .data-loader-dropdown__error {
     min-height: 38px;
     padding: 9px 0;
-    color: #52606d;
-    font-size: 13px;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
 }
 
 .data-loader-dropdown__error {
-    color: #9f1239;
+    color: var(--status-failed-text);
 }
 
 .data-loader-dropdown__retry {
     padding: 0;
     border: 0;
     background: transparent;
-    color: #006f8a;
+    color: var(--accent);
     cursor: pointer;
     font: inherit;
-    font-weight: 700;
+    font-weight: 600;
     text-decoration: underline;
-}
-
-.theme-dark {
-    .data-loader-dropdown__loading {
-        color: #c6d5e3;
-    }
-
-    .data-loader-dropdown__error {
-        color: #fda4af;
-    }
-
-    .data-loader-dropdown__retry {
-        color: #9fe8ef;
-    }
 }

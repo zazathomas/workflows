@@ -120,21 +120,32 @@ export function EventsPanel({namespace, name, kind}: {namespace: string; name: s
                     {events
                         .filter(e => e && e.lastTimestamp)
                         .sort((a, b) => -a.lastTimestamp.localeCompare(b.lastTimestamp))
-                        .map(e => (
-                            <div className='row argo-table-list__row' key={e.metadata.uid}>
-                                <div className='columns small-1' title={e.type}>
-                                    {e.type === 'Normal' ? <i className='fa fa-check-circle status-icon--init' /> : <i className='fa fa-exclamation-circle status-icon--pending' />}
+                        .map(e => {
+                            // Approval audit (AWX activity-stream pattern): suspend and
+                            // resume events mark who resolved an approval step.
+                            const approvalEvent = e.reason === 'WorkflowNodeSuspended' || e.reason === 'WorkflowNodeResumed';
+                            return (
+                                <div className={`row argo-table-list__row ${approvalEvent ? 'events-panel__approval-row' : ''}`} key={e.metadata.uid}>
+                                    <div className='columns small-1' title={e.type}>
+                                        {approvalEvent ? (
+                                            <i className='fa fa-user-check' title='Approval-related event' />
+                                        ) : e.type === 'Normal' ? (
+                                            <i className='fa fa-check-circle status-icon--init' />
+                                        ) : (
+                                            <i className='fa fa-exclamation-circle status-icon--pending' />
+                                        )}
+                                    </div>
+                                    <div className='columns small-2'>
+                                        <Timestamp date={e.lastTimestamp} displayISOFormat={storedDisplayISOFormat} />
+                                    </div>
+                                    <div className='columns small-2'>{e.reason}</div>
+                                    <div className='columns small-2'>
+                                        {e.involvedObject.kind}/{e.involvedObject.name}
+                                    </div>
+                                    <div className='columns small-5'>{e.message}</div>
                                 </div>
-                                <div className='columns small-2'>
-                                    <Timestamp date={e.lastTimestamp} displayISOFormat={storedDisplayISOFormat} />
-                                </div>
-                                <div className='columns small-2'>{e.reason}</div>
-                                <div className='columns small-2'>
-                                    {e.involvedObject.kind}/{e.involvedObject.name}
-                                </div>
-                                <div className='columns small-5'>{e.message}</div>
-                            </div>
-                        ))}
+                            );
+                        })}
                 </div>
             )}
         </>

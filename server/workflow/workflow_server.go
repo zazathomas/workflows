@@ -15,9 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/argoproj/argo-workflows/v4/errors"
@@ -32,6 +30,7 @@ import (
 	"github.com/argoproj/argo-workflows/v4/server/workflow/store"
 	argoutil "github.com/argoproj/argo-workflows/v4/util"
 	"github.com/argoproj/argo-workflows/v4/util/fields"
+	informerutil "github.com/argoproj/argo-workflows/v4/util/informer"
 	"github.com/argoproj/argo-workflows/v4/util/instanceid"
 	"github.com/argoproj/argo-workflows/v4/util/logging"
 	"github.com/argoproj/argo-workflows/v4/util/logs"
@@ -84,14 +83,7 @@ func NewServer(ctx context.Context, instanceIDService instanceid.Service, offloa
 		artifactRepositories:  artifactRepositories,
 	}
 	if wfStore != nil && namespace != nil {
-		lw := &cache.ListWatch{
-			ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
-				return wfClientSet.ArgoprojV1alpha1().Workflows(*namespace).List(ctx, options)
-			},
-			WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
-				return wfClientSet.ArgoprojV1alpha1().Workflows(*namespace).Watch(ctx, options)
-			},
-		}
+		lw := informerutil.WorkflowListWatch(wfClientSet.ArgoprojV1alpha1().Workflows(*namespace), instanceIDService, "api")
 		wfReflector := cache.NewReflector(lw, &wfv1.Workflow{}, wfStore, reSyncDuration)
 		ws.wfReflector = wfReflector
 	}
@@ -117,6 +109,14 @@ func (s *workflowServer) CreateWorkflow(ctx context.Context, req *workflowpkg.Wo
 
 	s.instanceIDService.Label(req.Workflow)
 	creator.LabelCreator(ctx, req.Workflow)
+
+	// Per-Job concurrency (docs/job-concurrency.md): the workflow carries
+	// the Job's control annotations (copied by SubmitWorkflow when it was
+	// submitted from a Job, or set by the author on a direct create); inject
+	// the equivalent synchronization mutex, and validate the annotations.
+	if err := injectConcurrency(req.Workflow); err != nil {
+		return nil, sutils.ToStatusError(err, codes.InvalidArgument)
+	}
 
 	wftmplGetter := s.wftmplStore.Getter(ctx, req.Workflow.Namespace)
 	cwftmplGetter := s.cwftmplStore.Getter(ctx)
@@ -269,7 +269,12 @@ func (s *workflowServer) ListWorkflows(ctx context.Context, req *workflowpkg.Wor
 	} else {
 		// For pagination without remaining count, use the efficient HasMoreWorkflows method
 		// This avoids expensive COUNT queries
-		hasMore, err := s.wfArchive.HasMoreWorkflows(ctx, options)
+		hasMore := int64(options.Offset)+int64(len(wfs)) < liveWfCount
+		var err error
+		if !hasMore && options.Limit > 0 {
+			archivedCursor := max(options.Offset+len(wfs)-int(liveWfCount), 0)
+			hasMore, err = s.wfArchive.HasMoreWorkflows(ctx, options.WithOffset(archivedCursor).WithLimit(0))
+		}
 		if err != nil {
 			return nil, sutils.ToStatusError(err, codes.Internal)
 		}
@@ -559,6 +564,15 @@ func (s *workflowServer) ResubmitWorkflow(ctx context.Context, req *workflowpkg.
 	return created, nil
 }
 
+func hasApprovalControls(wf *wfv1.Workflow) bool {
+	for _, key := range []string{common.AnnotationKeyApprovalApprovers, common.AnnotationKeyApprovalExpiry, common.AnnotationKeyApprovalAutoApproveAfter} {
+		if wf.Annotations[key] != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *workflowServer) ResumeWorkflow(ctx context.Context, req *workflowpkg.WorkflowResumeRequest) (*wfv1.Workflow, error) {
 	wfClient := auth.GetWfClient(ctx)
 	wf, err := s.getWorkflow(ctx, wfClient, req.Namespace, req.Name, "", metav1.GetOptions{})
@@ -571,6 +585,9 @@ func (s *workflowServer) ResumeWorkflow(ctx context.Context, req *workflowpkg.Wo
 		return nil, sutils.ToStatusError(err, codes.InvalidArgument)
 	}
 
+	if hasApprovalControls(wf) {
+		return nil, sutils.ToStatusError(fmt.Errorf("this workflow requires the approval API"), codes.PermissionDenied)
+	}
 	err = util.ResumeWorkflow(ctx, wfClient.ArgoprojV1alpha1().Workflows(req.Namespace), s.hydrator, wf.Name, req.NodeFieldSelector)
 	if err != nil {
 		logger := logging.RequireLoggerFromContext(ctx)
@@ -670,6 +687,9 @@ func (s *workflowServer) SetWorkflow(ctx context.Context, req *workflowpkg.Workf
 		return nil, sutils.ToStatusError(err, codes.InvalidArgument)
 	}
 
+	if req.Phase != "" && hasApprovalControls(wf) {
+		return nil, sutils.ToStatusError(fmt.Errorf("this workflow requires the approval API"), codes.PermissionDenied)
+	}
 	phaseToSet := wfv1.NodePhase(req.Phase)
 	switch phaseToSet {
 	case wfv1.NodeSucceeded, wfv1.NodeFailed, wfv1.NodeError, "":
@@ -809,8 +829,14 @@ func getLatestWorkflow(ctx context.Context, wfClient versioned.Interface, namesp
 }
 
 func (s *workflowServer) SubmitWorkflow(ctx context.Context, req *workflowpkg.WorkflowSubmitRequest) (*wfv1.Workflow, error) {
+	if req.Namespace == "" {
+		return nil, sutils.ToStatusError(fmt.Errorf("namespace is required"), codes.InvalidArgument)
+	}
 	wfClient := auth.GetWfClient(ctx)
 	var wf *wfv1.Workflow
+	// jobAnnotations are the annotations of the submitted resource (the
+	// Job), copied onto the workflow below.
+	var jobAnnotations map[string]string
 	switch req.ResourceKind {
 	case workflow.CronWorkflowKind, workflow.CronWorkflowSingular, workflow.CronWorkflowPlural, workflow.CronWorkflowShortName:
 		cronWf, err := wfClient.ArgoprojV1alpha1().CronWorkflows(req.Namespace).Get(ctx, req.ResourceName, metav1.GetOptions{})
@@ -818,19 +844,41 @@ func (s *workflowServer) SubmitWorkflow(ctx context.Context, req *workflowpkg.Wo
 			return nil, sutils.ToStatusError(err, codes.Internal)
 		}
 		wf = common.ConvertCronWorkflowToWorkflow(cronWf)
+		jobAnnotations = cronWf.Annotations
 	case workflow.WorkflowTemplateKind, workflow.WorkflowTemplateSingular, workflow.WorkflowTemplatePlural, workflow.WorkflowTemplateShortName:
+		wftmpl, err := wfClient.ArgoprojV1alpha1().WorkflowTemplates(req.Namespace).Get(ctx, req.ResourceName, metav1.GetOptions{})
+		if err != nil {
+			return nil, sutils.ToStatusError(err, codes.Internal)
+		}
 		wf = common.NewWorkflowFromWorkflowTemplate(req.ResourceName, false)
+		jobAnnotations = wftmpl.Annotations
 	case workflow.ClusterWorkflowTemplateKind, workflow.ClusterWorkflowTemplateSingular, workflow.ClusterWorkflowTemplatePlural, workflow.ClusterWorkflowTemplateShortName:
+		cwftmpl, err := wfClient.ArgoprojV1alpha1().ClusterWorkflowTemplates().Get(ctx, req.ResourceName, metav1.GetOptions{})
+		if err != nil {
+			return nil, sutils.ToStatusError(err, codes.Internal)
+		}
 		wf = common.NewWorkflowFromWorkflowTemplate(req.ResourceName, true)
+		jobAnnotations = cwftmpl.Annotations
 	default:
 		err := errors.Errorf(errors.CodeBadRequest, "Resource kind '%s' is not supported for submitting", req.ResourceKind)
 		err = sutils.ToStatusError(err, codes.InvalidArgument)
 		return nil, err
 	}
 
+	wf.Namespace = req.Namespace
 	s.instanceIDService.Label(wf)
 	creator.LabelCreator(ctx, wf)
 
+	// Fork job controls (docs/job-concurrency.md, docs/notifications.md,
+	// docs/approvals.md): the Job's control annotations travel onto the run,
+	// and the max-concurrent-runs cap becomes the equivalent
+	// synchronization mutex.
+	jobIdentity := make(map[string]string, 3)
+	for _, key := range []string{common.LabelKeyWorkflowTemplate, common.LabelKeyClusterWorkflowTemplate, common.LabelKeyCronWorkflow} {
+		if value := wf.Labels[key]; value != "" {
+			jobIdentity[key] = value
+		}
+	}
 	logger := logging.RequireLoggerFromContext(ctx)
 
 	// Validate SubmitOpts.Artifacts syntax up front so a malformed entry surfaces as
@@ -845,6 +893,23 @@ func (s *workflowServer) SubmitWorkflow(ctx context.Context, req *workflowpkg.Wo
 	err := util.ApplySubmitOpts(wf, req.SubmitOptions)
 	if err != nil {
 		return nil, sutils.ToStatusError(err, codes.Internal)
+	}
+	for _, key := range []string{common.LabelKeyWorkflowTemplate, common.LabelKeyClusterWorkflowTemplate, common.LabelKeyCronWorkflow} {
+		delete(wf.Labels, key)
+	}
+	for key, value := range jobIdentity {
+		wf.Labels[key] = value
+	}
+	s.instanceIDService.Label(wf)
+	// Explicit template policy takes precedence over client-provided annotations.
+	for key := range jobAnnotations {
+		if isJobControlAnnotation(key) {
+			delete(wf.Annotations, key)
+		}
+	}
+	copyJobAnnotations(wf, jobAnnotations)
+	if err := injectConcurrency(wf); err != nil {
+		return nil, sutils.ToStatusError(err, codes.InvalidArgument)
 	}
 
 	// Handle artifact overrides for workflowTemplateRef workflows
@@ -950,9 +1015,19 @@ func (s *workflowServer) SubmitWorkflow(ctx context.Context, req *workflowpkg.Wo
 		return workflow, nil
 	}
 
+	if _, policy, _ := jobConcurrency(wf); policy == OnConflictReject {
+		if err := s.resolveConflict(ctx, wfClient, wf); err != nil {
+			return nil, err
+		}
+	}
 	wf, err = wfClient.ArgoprojV1alpha1().Workflows(req.Namespace).Create(ctx, wf, metav1.CreateOptions{})
 	if err != nil {
 		return nil, sutils.ToStatusError(err, codes.InvalidArgument)
+	}
+	if _, policy, _ := jobConcurrency(wf); policy == OnConflictReplace {
+		if err := s.resolveConflict(ctx, wfClient, wf); err != nil {
+			logger.WithError(err).WithFields(logging.Fields{"namespace": wf.Namespace, "workflow": wf.Name, "workflowUID": string(wf.UID), "policy": OnConflictReplace}).Error(ctx, "workflow created but replacement was incomplete")
+		}
 	}
 	return wf, nil
 }

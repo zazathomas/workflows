@@ -14,7 +14,7 @@ import {ZeroState} from '../shared/components/zero-state';
 import {Context} from '../shared/context';
 import {Footnote} from '../shared/footnote';
 import {historyUrl} from '../shared/history';
-import {CronWorkflow} from '../shared/models';
+import {CronWorkflow, labels as labelKeys, Workflow} from '../shared/models';
 import {matchesLabelContains, matchesNameOrTitle} from '../shared/name-title-search';
 import * as nsUtils from '../shared/namespaces';
 import {services} from '../shared/services';
@@ -93,6 +93,29 @@ export function CronWorkflowList({match, location, history}: RouteComponentProps
 
     const visibleCronWorkflows = (cronWorkflows || []).filter(workflow => matchesNameOrTitle(workflow, namePattern) && matchesLabelContains(workflow, labelContains));
 
+    // AWX-style "run now": submit the schedule's workflow immediately and jump
+    // to the new run
+    function runNow(cronWorkflow: CronWorkflow) {
+        const workflow: Workflow = {
+            apiVersion: 'argoproj.io/v1alpha1',
+            kind: 'Workflow',
+            metadata: {
+                ...(cronWorkflow.spec.workflowMetadata || {}),
+                generateName: `${cronWorkflow.metadata.name}-`,
+                namespace: cronWorkflow.metadata.namespace,
+                labels: {
+                    ...(cronWorkflow.spec.workflowMetadata?.labels || {}),
+                    [labelKeys.cronWorkflow]: cronWorkflow.metadata.name
+                }
+            },
+            spec: cronWorkflow.spec.workflowSpec
+        };
+        services.workflows
+            .create(workflow, cronWorkflow.metadata.namespace)
+            .then(created => navigation.goto(uiUrl(`workflows/${created.metadata.namespace}/${created.metadata.name}`)))
+            .catch(setError);
+    }
+
     useCollectEvent('openedCronWorkflowList');
 
     return (
@@ -150,20 +173,22 @@ export function CronWorkflowList({match, location, history}: RouteComponentProps
                                 <div className='row argo-table-list__head'>
                                     <div className='columns small-1' />
                                     <div className='columns small-2'>NAME</div>
-                                    <div className='columns small-2'>NAMESPACE</div>
+                                    <div className='columns small-1'>NAMESPACE</div>
                                     <div className='columns small-1'>TimeZone</div>
                                     <div className='columns small-2'>SCHEDULES</div>
                                     <div className='columns small-2'>
                                         CREATED{' '}
                                         <TimestampSwitch storedDisplayISOFormat={storedDisplayISOFormatCreation} setStoredDisplayISOFormat={setStoredDisplayISOFormatCreation} />
                                     </div>
-                                    <div className='columns small-2'>
+                                    <div className='columns small-2'>LAST RUN</div>
+                                    <div className='columns small-1'>
                                         NEXT RUN{' '}
                                         <TimestampSwitch
                                             storedDisplayISOFormat={storedDisplayISOFormatNextScheduled}
                                             setStoredDisplayISOFormat={setStoredDisplayISOFormatNextScheduled}
                                         />
                                     </div>
+                                    <div className='columns small-1'>RUN</div>
                                 </div>
                                 {visibleCronWorkflows.map(w => {
                                     return (
@@ -172,6 +197,7 @@ export function CronWorkflowList({match, location, history}: RouteComponentProps
                                             displayISOFormatCreation={storedDisplayISOFormatCreation}
                                             displayISOFormatNextScheduled={storedDisplayISOFormatNextScheduled}
                                             key={`${w.metadata.namespace}/${w.metadata.name}`}
+                                            onRunNow={runNow}
                                         />
                                     );
                                 })}

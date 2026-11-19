@@ -1,91 +1,79 @@
 @import 'node_modules/argo-ui/src/styles/config';
 
 .argo-table-list {
-  margin: 1em;
-  &__row:hover {
-    box-shadow: 1px 2px 3px rgba($argo-color-gray-9, .1), 0 0 0 1px rgba($argo-color-teal-5, .5);
-  }
+    margin: var(--space-4);
 }
 
 .workflow-templates-list {
-  padding: 1em;
+    padding: var(--space-4);
 
-  &__row-container {
-    a {
-      color: $argo-color-gray-6;
+    &__row-container {
+        a {
+            color: var(--text-primary);
+        }
+
+        a:hover {
+            color: var(--accent);
+        }
     }
 
-    a:hover {
-      color: $argo-color-teal-5;
+    .row {
+        min-width: 0;
     }
-  }
-
-  .row {
-    min-width: 0;
-  }
 }
 
 .job-template-chooser {
-  max-width: 540px;
-  padding-top: 48px;
+    max-width: 540px;
+    padding-top: var(--space-6);
 
-  fieldset {
-    margin: 24px 0;
-    padding: 0;
-    border: 0;
-  }
-
-  legend {
-    margin-bottom: 12px;
-    font-weight: 700;
-  }
-
-  &__option {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 10px;
-    padding: 16px;
-    border: 1px solid #b9ccd5;
-    border-radius: 8px;
-    background: #fff;
-    color: #253044;
-    cursor: pointer;
-
-    &:focus-within {
-      outline: 2px solid #006f8a;
-      outline-offset: 2px;
+    fieldset {
+        margin: var(--space-5) 0;
+        padding: 0;
+        border: 0;
     }
 
-    input {
-      margin-top: 4px;
+    legend {
+        margin-bottom: var(--space-3);
+        color: var(--text-strong);
+        font-weight: 600;
     }
 
-    span, small {
-      display: block;
-    }
+    &__option {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
+        margin-bottom: 10px;
+        padding: var(--space-4);
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
+        color: var(--text-primary);
+        cursor: pointer;
 
-    small {
-      margin-top: 4px;
-      color: #526575;
+        &:hover {
+            border-color: var(--accent);
+        }
+
+        input {
+            margin-top: var(--space-1);
+        }
+
+        span,
+        small {
+            display: block;
+        }
+
+        small {
+            margin-top: var(--space-1);
+            color: var(--text-secondary);
+        }
     }
-  }
 }
 
 .job-template-editor {
-  padding-top: 48px;
-}
-
-.theme-dark .job-template-chooser__option {
-  border-color: #526579;
-  background: #1f2937;
-  color: #e5edf5;
-
-  small {
-    color: #c3d1df;
-  }
+    padding-top: var(--space-6);
 }
 
 .row.pt-60 {
-  padding-top: 60px;
+    padding-top: 60px;
 }

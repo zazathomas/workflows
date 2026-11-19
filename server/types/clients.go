@@ -4,6 +4,7 @@ import (
 	events "github.com/argoproj/argo-events/pkg/client/clientset/versioned"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/metadata"
 
 	workflow "github.com/argoproj/argo-workflows/v4/pkg/client/clientset/versioned"
 )
@@ -13,4 +14,5 @@ type Clients struct {
 	Workflow   workflow.Interface
 	Events     events.Interface
 	Kubernetes kubernetes.Interface
+	Metadata   metadata.Interface
 }

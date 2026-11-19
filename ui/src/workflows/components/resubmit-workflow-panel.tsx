@@ -79,7 +79,7 @@ export function ResubmitWorkflowPanel(props: Props) {
 
                 {overrideParameters && memoized && (
                     <div key='warning-override-with-memoized'>
-                        <i className='fa fa-exclamation-triangle' style={{color: '#f4c030'}} />
+                        <i className='fa fa-exclamation-triangle' style={{color: 'var(--status-pending-mark)'}} />
                         Overriding parameters on memoized submitted workflows may have unexpected results.
                     </div>
                 )}

@@ -1,0 +1,80 @@
+.node-box-score {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 16px;
+}
+
+.node-box-score__tiles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.node-box-score__tile {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 58px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+}
+
+.node-box-score__count {
+    font-size: 1.3em;
+    font-weight: 600;
+    line-height: 1.1;
+}
+
+.node-box-score__label {
+    font-size: 0.78em;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.node-box-score__tile--succeeded {
+    color: var(--status-succeeded-text);
+    background: var(--status-succeeded-soft);
+}
+
+.node-box-score__tile--running {
+    color: var(--status-running-text);
+    background: var(--status-running-soft);
+}
+
+.node-box-score__tile--pending {
+    color: var(--status-pending-text);
+    background: var(--status-pending-soft);
+}
+
+.node-box-score__tile--failed,
+.node-box-score__tile--error {
+    color: var(--status-failed-text);
+    background: var(--status-failed-soft);
+}
+
+.node-box-score__tile--skipped,
+.node-box-score__tile--omitted {
+    color: var(--status-neutral-text);
+    background: var(--status-neutral-soft);
+}
+
+.node-box-score__total {
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.now-running {
+    margin-bottom: 16px;
+    gap: 4px;
+}
+
+.now-running__label {
+    color: var(--text-muted);
+}
+
+.now-running__node {
+    font-weight: 500;
+}

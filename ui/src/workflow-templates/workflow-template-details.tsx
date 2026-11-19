@@ -20,6 +20,8 @@ import {useQueryParams} from '../shared/use-query-params';
 import {WidgetGallery} from '../widgets/widget-gallery';
 import {SubmitWorkflowPanel} from '../workflows/components/submit-workflow-panel';
 import {WorkflowDetailsList} from '../workflows/components/workflow-details-list/workflow-details-list';
+import {JobRunStats} from './job-run-stats';
+import {TriggerPanel} from './trigger-panel';
 import {WorkflowTemplateEditor} from './workflow-template-editor';
 
 export function WorkflowTemplateDetails({history, location, match}: RouteComponentProps<any>) {
@@ -90,6 +92,10 @@ export function WorkflowTemplateDetails({history, location, match}: RouteCompone
 
     useCollectEvent('openedWorkflowTemplateDetails');
 
+    function runningWorkflows(): Workflow[] {
+        return (workflows || []).filter(wf => wf.status?.phase === 'Running' || wf.status?.phase === 'Pending');
+    }
+
     return (
         <Page
             title='Workflow Template Details'
@@ -138,6 +144,29 @@ export function WorkflowTemplateDetails({history, location, match}: RouteCompone
                             title: 'Share',
                             iconClassName: 'fa fa-share-alt',
                             action: () => setSidePanel('share')
+                        },
+                        {
+                            title: 'Trigger',
+                            iconClassName: 'fa fa-bolt',
+                            action: () => setSidePanel('trigger')
+                        },
+                        {
+                            // Semaphore "Stop all": stop every running run of this job.
+                            title: 'Stop all runs',
+                            iconClassName: 'fa fa-stop-circle',
+                            disabled: !runningWorkflows().length,
+                            action: () => {
+                                const running = runningWorkflows();
+                                popup.confirm('Confirm stop all', `Stop all ${running.length} running ${running.length === 1 ? 'run' : 'runs'} of this job?`).then(yes => {
+                                    if (!yes) return;
+                                    Promise.all(running.map(wf => services.workflows.stop(wf.metadata.name, wf.metadata.namespace)))
+                                        .then(() =>
+                                            notifications.show({content: `Stopped ${running.length} ${running.length === 1 ? 'run' : 'runs'}`, type: NotificationType.Success})
+                                        )
+                                        .then(() => setError(null))
+                                        .catch(setError);
+                                });
+                            }
                         }
                     ]
                 }
@@ -156,6 +185,7 @@ export function WorkflowTemplateDetails({history, location, match}: RouteCompone
                         onError={setError}
                         onTabSelected={setTab}
                         selectedTabKey={tab}
+                        showChanges={true}
                     />
                 )}
             </>
@@ -175,6 +205,7 @@ export function WorkflowTemplateDetails({history, location, match}: RouteCompone
                         />
                     )}
                     {sidePanel === 'share' && <WidgetGallery namespace={namespace} label={'workflows.argoproj.io/workflow-template=' + name} />}
+                    {sidePanel === 'trigger' && <TriggerPanel kind='WorkflowTemplate' namespace={namespace} name={name} />}
                 </AccessibleSlidingPanel>
             )}
             <>
@@ -183,7 +214,11 @@ export function WorkflowTemplateDetails({history, location, match}: RouteCompone
                         <p> You can create new workflow templates here or using the CLI. </p>
                     </ZeroState>
                 ) : (
-                    <WorkflowDetailsList workflows={workflows} columns={columns} />
+                    <>
+                        <h5>Recent runs</h5>
+                        <JobRunStats workflows={workflows} />
+                        <WorkflowDetailsList workflows={workflows} columns={columns} />
+                    </>
                 )}
             </>
         </Page>

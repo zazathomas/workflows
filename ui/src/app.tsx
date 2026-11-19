@@ -6,6 +6,9 @@ import type {History} from 'history';
 import * as React from 'react';
 
 import 'argo-ui/src/styles/main.scss';
+// Design tokens and element overrides. Must load after argo-ui's stylesheet so
+// the tokenised surfaces win over the hardcoded argo-ui colours.
+import './shared/theme-tokens.scss';
 
 import {AppRouter} from './app-router';
 import {ContextApis, Provider} from './shared/context';

@@ -1,7 +1,7 @@
 import {Page} from 'argo-ui/src/components/page/page';
 import * as React from 'react';
 import {useContext, useEffect, useMemo, useRef, useState} from 'react';
-import {RouteComponentProps} from 'react-router-dom';
+import {Link, RouteComponentProps} from 'react-router-dom';
 
 import {uiUrl} from '../../../shared/base';
 import {AccessibleSlidingPanel} from '../../../shared/components/accessible-sliding-panel';
@@ -14,15 +14,19 @@ import {PaginationPanel} from '../../../shared/components/pagination-panel';
 import {TimestampSwitch} from '../../../shared/components/timestamp';
 import {ZeroState} from '../../../shared/components/zero-state';
 import {Context} from '../../../shared/context';
+import {formatDuration, wfDuration} from '../../../shared/duration';
+import {downloadCsv, toCsv} from '../../../shared/export-csv';
 import {historyUrl} from '../../../shared/history';
 import {ListWatch, sortByYouth} from '../../../shared/list-watch';
 import * as models from '../../../shared/models';
 import {isArchivedWorkflow, Workflow, WorkflowPhase, WorkflowPhases} from '../../../shared/models';
-import {fetchAllPages, matchesLabelContains, matchesWorkflowName, searchPageOffset} from '../../../shared/name-title-search';
 import * as nsUtils from '../../../shared/namespaces';
 import {Pagination, parseLimit} from '../../../shared/pagination';
+import {SavedView, SavedViewsBar, viewKey} from '../../../shared/saved-views';
 import {ScopedLocalStorage} from '../../../shared/scoped-local-storage';
 import {services} from '../../../shared/services';
+import {getStartedBy, startedByText} from '../../../shared/started-by';
+import {useApprovalsCount} from '../../../shared/use-approvals-count';
 import {useCollectEvent} from '../../../shared/use-collect-event';
 import useTimestamp, {TIMESTAMP_KEYS} from '../../../shared/use-timestamp';
 import * as Actions from '../../../shared/workflow-operations-map';
@@ -31,7 +35,6 @@ import {
     ARCHIVE_FILTERS,
     ArchiveFilter,
     matchesArchiveFilter,
-    matchesWorkflowDates,
     NAME_FILTER_KEYS,
     WorkflowFilters,
     type NameFilterKeys
@@ -66,6 +69,18 @@ const allBatchActionsEnabled: Actions.OperationDisabled = {
 };
 
 const storage = new ScopedLocalStorage('ListOptions');
+const viewsStorage = new ScopedLocalStorage('WorkflowsListViews');
+
+// built-in saved views, shown as chips above the filters (Temporal pattern)
+const BUILT_IN_VIEWS: SavedView[] = [
+    {name: 'Running', builtIn: true, filters: {phases: ['Running']}},
+    {name: 'Failed', builtIn: true, filters: {phases: ['Failed', 'Error']}},
+    {name: 'Succeeded', builtIn: true, filters: {phases: ['Succeeded']}},
+    {name: 'Pending', builtIn: true, filters: {phases: ['Pending']}},
+    // Runs held by a semaphore or mutex (Semaphore "waiting" queue): running
+    // runs whose steps wait on a synchronization lock.
+    {name: 'Queued', builtIn: true, filters: {phases: ['Running'], synchronization: 'waiting'}}
+];
 
 export function WorkflowsList({match, location, history}: RouteComponentProps<any>) {
     const queryParams = new URLSearchParams(location.search);
@@ -113,12 +128,15 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
     const [links, setLinks] = useState<models.Link[]>([]);
     const [columns, setColumns] = useState<models.Column[]>([]);
     const [error, setError] = useState<Error>();
-    const [searchTruncated, setSearchTruncated] = useState(false);
     const [nameValue, setNameValue] = useState<string>(() => {
         return queryParams.get(NAME_FILTER_KEYS.find(key => queryParams.get(key))) || '';
     });
     const [labelContains, setLabelContains] = useState(queryParams.get('labelContains') || '');
     const [nameFilter] = useState<NameFilterKeys>(() => NAME_FILTER_KEYS.find(key => queryParams.get(key)) || 'Contains');
+    const [customViews, setCustomViews] = useState<SavedView[]>(() => viewsStorage.getItem('views', [] as SavedView[]));
+    // '' shows everything; 'waiting' only runs whose steps wait on a
+    // synchronization lock (semaphore or mutex).
+    const [synchronization, setSynchronization] = useState<'' | 'waiting'>(queryParams.get('synchronization') === 'waiting' ? 'waiting' : '');
 
     const batchActionDisabled = useMemo<Actions.OperationDisabled>(() => {
         const nowDisabled: any = {...allBatchActionsEnabled};
@@ -131,9 +149,17 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
     }, [selectedWorkflows]);
 
     const visibleWorkflows = useMemo<Workflow[]>(() => {
-        const matching = (workflows || []).filter(workflow => matchesArchiveFilter(workflow, archiveFilter));
+        const matching = (workflows || [])
+            .filter(workflow => matchesArchiveFilter(workflow, archiveFilter))
+            .filter(workflow => {
+                if (synchronization !== 'waiting') {
+                    return true;
+                }
+                const waiting = workflow.status?.synchronization?.semaphore?.waiting || workflow.status?.synchronization?.mutex?.waiting;
+                return Object.keys(waiting || {}).length > 0;
+            });
         return sortWorkflows(matching, sortColumn, sortDirection);
-    }, [workflows, archiveFilter, sortColumn, sortDirection]);
+    }, [workflows, archiveFilter, sortColumn, sortDirection, synchronization]);
     const counts = countsByCompleted(visibleWorkflows);
 
     function clearSelectedWorkflows() {
@@ -145,7 +171,71 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
         clearSelectedWorkflows();
     }
 
-    const hasActiveFilters = !!(nameValue || labelContains || labels.length > 0 || phases.length > 0 || createdAfter || finishedBefore || archiveFilter !== 'all');
+    const hasActiveFilters = !!(
+        nameValue ||
+        labelContains ||
+        labels.length > 0 ||
+        phases.length > 0 ||
+        createdAfter ||
+        finishedBefore ||
+        archiveFilter !== 'all' ||
+        synchronization !== ''
+    );
+
+    // saved views: the current filter combination, canonically serialized
+    const currentFilters = {
+        phases,
+        labels,
+        nameValue: nameValue || undefined,
+        labelContains: labelContains || undefined,
+        createdAfter: createdAfter?.toISOString(),
+        finishedBefore: finishedBefore?.toISOString(),
+        archiveFilter: archiveFilter === 'all' ? undefined : archiveFilter,
+        synchronization: synchronization || undefined
+    };
+    const currentViewKey = viewKey(currentFilters);
+
+    function applyView(view: SavedView) {
+        const filters = view.filters;
+        setPhases(((filters.phases as string[]) || []).slice() as WorkflowPhase[]);
+        setLabels(((filters.labels as string[]) || []).slice());
+        setNameValue((filters.nameValue as string) || '');
+        setLabelContains((filters.labelContains as string) || '');
+        setCreatedAfter(filters.createdAfter ? new Date(filters.createdAfter as string) : undefined);
+        setFinishedBefore(filters.finishedBefore ? new Date(filters.finishedBefore as string) : undefined);
+        setArchiveFilter((filters.archiveFilter as ArchiveFilter) || 'all');
+        setSynchronization(filters.synchronization === 'waiting' ? 'waiting' : '');
+        resetFilteredList();
+    }
+
+    function saveView(name: string) {
+        const next = customViews.filter(view => view.name !== name).concat({name, filters: currentFilters});
+        viewsStorage.setItem('views', next, [] as SavedView[]);
+        setCustomViews(next);
+    }
+
+    function deleteView(view: SavedView) {
+        const next = customViews.filter(item => item.name !== view.name);
+        viewsStorage.setItem('views', next, [] as SavedView[]);
+        setCustomViews(next);
+    }
+
+    // Rundeck-style activity export
+    function exportCsv() {
+        const headers = ['name', 'namespace', 'status', 'started', 'finished', 'duration', 'progress', 'started by', 'message'];
+        const rows = visibleWorkflows.map(wf => [
+            wf.metadata.name,
+            wf.metadata.namespace,
+            wf.status?.phase || '',
+            wf.status?.startedAt || '',
+            wf.status?.finishedAt || '',
+            wf.status?.startedAt ? formatDuration(wfDuration(wf.status)) : '',
+            wf.status?.progress || '',
+            startedByText(getStartedBy(wf)),
+            wf.status?.message || ''
+        ]);
+        downloadCsv(`runs-${namespace || 'all'}.csv`, toCsv(headers, rows));
+    }
 
     function clearFilters() {
         setNamespace(nsUtils.getNamespace(match.params.namespace) || '');
@@ -156,6 +246,7 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
         setArchiveFilter('all');
         setNameValue('');
         setLabelContains('');
+        setSynchronization('');
         setPagination(current => ({...current, offset: undefined}));
         clearSelectedWorkflows();
     }
@@ -233,6 +324,9 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
         if (archiveFilter !== 'all') {
             params.append('archive', archiveFilter);
         }
+        if (synchronization === 'waiting') {
+            params.append('synchronization', 'waiting');
+        }
         (isFirstRender.current ? history.replace : history.push)(
             historyUrl('workflows' + (nsUtils.getManagedNamespace() ? '' : '/{namespace}'), {namespace, extraSearchParams: params})
         );
@@ -246,6 +340,7 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
         nameValue,
         nameFilter,
         labelContains,
+        synchronization,
         createdAfter,
         finishedBefore,
         archiveFilter,
@@ -253,82 +348,78 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
     ]); // referential equality, so use values, not refs
 
     useEffect(() => {
-        const searchAll = (nameFilter === 'Contains' && !!nameValue.trim()) || !!labelContains.trim();
+        const nameTitleContains = nameFilter === 'Contains' ? nameValue.trim() : '';
+        const labelTerm = labelContains.trim();
+        const searching = !!(nameTitleContains || labelTerm);
         let cancelled = false;
+        let timer: ReturnType<typeof setTimeout>;
         setWorkflows(undefined);
-        setSearchTruncated(false);
-        const listWatch = new ListWatch(
-            () =>
-                searchAll
-                    ? fetchAllPages(page => {
-                          if (cancelled) return Promise.reject(new Error('Search cancelled'));
-                          return services.workflows.list(
-                              namespace,
-                              phases,
-                              labels,
-                              {...page, includeRemainingItemCount: true},
-                              undefined,
-                              nameFilter === 'Contains' ? '' : nameValue,
-                              nameFilter,
-                              createdAfter,
-                              finishedBefore,
-                              archiveFilter
-                          );
-                      })
-                    : services.workflows.list(
-                          namespace,
-                          phases,
-                          labels,
-                          pagination,
-                          undefined,
-                          nameFilter === 'Contains' ? nameValue.trim() : nameValue,
-                          nameFilter,
-                          createdAfter,
-                          finishedBefore,
-                          archiveFilter
-                      ),
-            (resourceVersion: string) => services.workflows.watchFields({namespace, phases, labels, resourceVersion, archiveFilter}),
-            metadata => {
-                setSearchTruncated(searchAll && !!(metadata as typeof metadata & {scanTruncated?: boolean}).scanTruncated);
-                setError(null);
-                if (!searchAll) setPagination({...pagination, nextOffset: metadata.continue});
+        const list = () =>
+            services.workflows.list(
+                namespace,
+                phases,
+                labels,
+                searching && !pagination.limit ? {...pagination, limit: 100} : pagination,
+                undefined,
+                nameTitleContains ? undefined : nameValue,
+                nameFilter,
+                createdAfter,
+                finishedBefore,
+                archiveFilter,
+                searching ? {nameTitleContains, labelContains: labelTerm} : undefined
+            );
+        const onLoad = (metadata: {continue?: string}) => {
+            setError(null);
+            setPagination(current => ({...current, nextOffset: metadata?.continue}));
+            clearSelectedWorkflows();
+        };
+
+        if (searching) {
+            // Refresh the matching page. Merging an unfiltered watch could insert
+            // non-matches and displace rows across page boundaries.
+            const refresh = async () => {
+                try {
+                    const page = await list();
+                    if (!cancelled) {
+                        onLoad(page.metadata);
+                        setWorkflows([...(page.items || [])]);
+                    }
+                } catch (err) {
+                    if (!cancelled) setError(err);
+                } finally {
+                    if (!cancelled) timer = setTimeout(refresh, 15000);
+                }
+            };
+            timer = setTimeout(refresh, 250);
+            return () => {
+                cancelled = true;
+                clearTimeout(timer);
                 clearSelectedWorkflows();
-            },
+            };
+        }
+
+        const listWatch = new ListWatch(
+            list,
+            (resourceVersion: string) => services.workflows.watchFields({namespace, phases, labels, resourceVersion, archiveFilter}),
+            onLoad,
             () => setError(null),
-            newWorkflows => {
-                if (!searchAll) {
-                    setWorkflows([...newWorkflows]);
-                    return;
-                }
-                const matching = newWorkflows.filter(
-                    workflow =>
-                        matchesWorkflowName(workflow, nameValue, nameFilter) &&
-                        matchesLabelContains(workflow, labelContains) &&
-                        matchesArchiveFilter(workflow, archiveFilter) &&
-                        matchesWorkflowDates(workflow, createdAfter, finishedBefore)
-                );
-                const offset = searchPageOffset(pagination.offset);
-                if (offset > 0 && offset >= matching.length) {
-                    setPagination(current => ({...current, offset: undefined, nextOffset: undefined}));
-                    return;
-                }
-                const end = pagination.limit > 0 ? offset + pagination.limit : matching.length;
-                setPagination(current => ({...current, nextOffset: end < matching.length ? `search:${end}` : undefined}));
-                setWorkflows(matching.slice(offset, end));
-            },
+            newWorkflows => setWorkflows([...newWorkflows]),
             err => setError(err),
             sortByYouth
         );
         listWatch.start();
-
         return () => {
-            cancelled = true;
             clearSelectedWorkflows();
             listWatch.stop();
         };
     }, [namespace, phases.toString(), labels.toString(), pagination.limit, pagination.offset, nameValue, nameFilter, labelContains, createdAfter, finishedBefore, archiveFilter]); // referential equality, so use values, not refs
 
     useCollectEvent('openedWorkflowList');
+
+    // Approvals live on the Runs page: the strip counts suspended steps of
+    // running runs (sharing the nav item's poll) and links to the approvals
+    // queue.
+    const approvalsCount = useApprovalsCount(namespace);
 
     const [storedDisplayISOFormatStart, setStoredDisplayISOFormatStart] = useTimestamp(TIMESTAMP_KEYS.WORKFLOWS_ROW_STARTED);
     const [storedDisplayISOFormatFinished, setStoredDisplayISOFormatFinished] = useTimestamp(TIMESTAMP_KEYS.WORKFLOWS_ROW_FINISHED);
@@ -357,6 +448,15 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
                 }
             }}>
             <h1 className='modern-visually-hidden'>Runs</h1>
+            {approvalsCount !== undefined && approvalsCount > 0 && (
+                <div className='workflows-list__approvals-strip' role='status'>
+                    <i className='fa fa-user-check' aria-hidden='true' />
+                    <span>
+                        {approvalsCount} {approvalsCount === 1 ? 'step is' : 'steps are'} waiting for your approval
+                    </span>
+                    <Link to={uiUrl(namespace ? `approvals/${namespace}` : 'approvals')}>Review</Link>
+                </div>
+            )}
             <WorkflowsToolbar
                 selectedWorkflows={selectedWorkflows}
                 clearSelection={clearSelectedWorkflows}
@@ -365,6 +465,20 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
             />
             <div className={`workflows-list__body ${selectedWorkflows.size === 0 ? '' : 'pt-60'}`}>
                 <div className='workflows-list__controls'>
+                    <div className='workflows-list__view-controls'>
+                        <SavedViewsBar views={BUILT_IN_VIEWS.concat(customViews)} currentKey={currentViewKey} onApply={applyView} onSave={saveView} onDelete={deleteView} />
+                        <button
+                            type='button'
+                            className={`argo-button argo-button--base-o workflows-list__queued-toggle ${synchronization === 'waiting' ? 'active' : ''}`}
+                            aria-pressed={synchronization === 'waiting'}
+                            title='Only show runs whose steps wait on a semaphore or mutex'
+                            onClick={() => {
+                                setSynchronization(current => (current === 'waiting' ? '' : 'waiting'));
+                                resetFilteredList();
+                            }}>
+                            <i className='fa fa-hourglass-half' aria-hidden='true' /> Queued only
+                        </button>
+                    </div>
                     <WorkflowsSummaryContainer
                         workflows={workflows}
                         selectedPhases={phases}
@@ -421,11 +535,10 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
                 </div>
                 <div className='workflows-list__results'>
                     <ErrorNotice error={error} />
-                    {searchTruncated && <p role='status'>Search scanned the first 2,000 runs only. Refine your search to find other matches.</p>}
                     {!workflows ? (
                         !error && (
                             <>
-                                {((nameFilter === 'Contains' && nameValue.trim()) || labelContains.trim()) && <p role='status'>Searching the first 2,000 runs...</p>}
+                                {((nameFilter === 'Contains' && nameValue.trim()) || labelContains.trim()) && <p role='status'>Searching runs...</p>}
                                 <Loading />
                             </>
                         )
@@ -435,7 +548,7 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
                                 <>
                                     <p>Try changing your filters or clear them to see all runs.</p>
                                     <button type='button' className='argo-button argo-button--base-o' onClick={clearFilters}>
-                                        Clear filters
+                                        Clear all
                                     </button>
                                 </>
                             ) : (
@@ -483,6 +596,9 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
                                         {pagination.limit === 0 ? 'Sorts all loaded results' : 'Sorts this page only'}
                                     </small>
                                 </div>
+                                <button type='button' className='argo-button argo-button--base-o' onClick={exportCsv} title='Export the filtered runs to a CSV file'>
+                                    <i className='fa fa-download' aria-hidden='true' /> Export CSV
+                                </button>
                                 <details>
                                     <summary>Choose columns</summary>
                                     <fieldset>
@@ -576,6 +692,11 @@ export function WorkflowsList({match, location, history}: RouteComponentProps<an
                                             {visibleColumns.includes('archived') && (
                                                 <div className='columns small-1' role='columnheader'>
                                                     ARCHIVED
+                                                </div>
+                                            )}
+                                            {visibleColumns.includes('startedBy') && (
+                                                <div className='columns small-1' role='columnheader'>
+                                                    STARTED BY
                                                 </div>
                                             )}
                                             {(columns || []).map(col => {

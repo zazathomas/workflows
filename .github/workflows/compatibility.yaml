@@ -28,6 +28,7 @@ concurrency:
 jobs:
   registry:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       versions: ${{ steps.read.outputs.versions }}
       baseline: ${{ steps.read.outputs.baseline }}
@@ -52,9 +53,12 @@ jobs:
           print('versions=' + json.dumps(matrix, separators=(',', ':')))
           PY
 
+  # The contract check is the pull-request gate: it needs no image and no
+  # cluster, so a schema break is caught in about a minute.
   contract:
     needs: registry
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -67,27 +71,90 @@ jobs:
       - name: Compare the API contract
         run: python3 hack/verify-upstream-contract.py --tag "${{ matrix.version.tag }}"
 
+  # One image for every release, built once and handed to the cluster jobs.
+  # Pull requests skip it (nothing would consume the artifact), and so does a
+  # `scope: contract` dispatch.
   image:
     needs: registry
+    if: github.event_name != 'pull_request' && inputs.scope != 'contract'
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Capture build metadata
+        id: meta
+        run: echo "date=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+      # Same cache scope as CI and the release: the Go and UI layers of this
+      # image are compiled once per commit, not once per workflow.
       - name: Build the server image once for every release
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          target: server
+          platforms: linux/amd64
+          load: true
+          tags: workflows:compatibility
+          build-args: |
+            VERSION=compatibility
+            GIT_COMMIT=${{ github.sha }}
+            GIT_TAG=compatibility
+            GIT_TREE_STATE=clean
+            BUILD_DATE=${{ steps.meta.outputs.date }}
+          cache-from: type=gha,scope=server-image
+          cache-to: type=gha,mode=max,scope=server-image
+      - name: Build the runner image once for every release
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile.runner
+          platforms: linux/amd64
+          load: true
+          tags: workflows-runner:compatibility
+          build-args: |
+            VERSION=compatibility
+            GIT_COMMIT=${{ github.sha }}
+            GIT_TAG=compatibility
+            GIT_TREE_STATE=clean
+            BUILD_DATE=${{ steps.meta.outputs.date }}
+          cache-from: type=gha,scope=runner-image
+          cache-to: type=gha,mode=max,scope=runner-image
+      - name: Build the standalone runner broker image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile.runner-broker
+          platforms: linux/amd64
+          load: true
+          tags: workflows-runner-broker:compatibility
+          cache-from: type=gha,scope=runner-broker-image
+          cache-to: type=gha,mode=max,scope=runner-broker-image
+      - name: Check the images run
         run: |
-          docker build --target server \
-            --build-arg VERSION=compatibility \
-            --build-arg GIT_COMMIT="$GITHUB_SHA" \
-            --build-arg GIT_TAG=compatibility \
-            --build-arg GIT_TREE_STATE=clean \
-            --build-arg BUILD_DATE="$(git show -s --format=%cI HEAD)" \
-            -t workflows:compatibility .
           docker run --rm workflows:compatibility version
+          docker run --rm --entrypoint argo-runner workflows-runner:compatibility version
+      - name: Export the images for the cluster jobs
+        run: |
           docker save workflows:compatibility | gzip -1 > workflows-image.tar.gz
-          ls -lh workflows-image.tar.gz
+          docker save workflows-runner:compatibility | gzip -1 > workflows-runner-image.tar.gz
+          docker save workflows-runner-broker:compatibility | gzip -1 > workflows-runner-broker-image.tar.gz
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: workflows-image
           path: workflows-image.tar.gz
+          retention-days: 3
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: workflows-runner-image
+          path: workflows-runner-image.tar.gz
+          retention-days: 3
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: workflows-runner-broker-image
+          path: workflows-runner-broker-image.tar.gz
           retention-days: 3
           if-no-files-found: error
 
@@ -95,11 +162,7 @@ jobs:
     needs:
       - registry
       - image
-    if: |
-      github.event_name == 'workflow_call' ||
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'schedule' ||
-      github.event_name == 'push'
+    if: github.event_name != 'pull_request' && inputs.scope != 'contract'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -109,18 +172,46 @@ jobs:
     name: conformance ${{ matrix.version.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: workflows-image
-      - name: Load the server image
-        run: docker load < workflows-image.tar.gz
-      - name: Install kind
-        run: go install sigs.k8s.io/kind@v0.30.0
+      - name: Load the server image and install kind
+        run: |
+          docker load < workflows-image.tar.gz
+          # The prebuilt binary: `go install sigs.k8s.io/kind` compiled kind from
+          # source in every shard, which cost more than the cluster it drives.
+          curl -fsSL -o "$RUNNER_TEMP/kind" "https://kind.sigs.k8s.io/dl/v0.30.0/kind-linux-amd64"
+          chmod +x "$RUNNER_TEMP/kind"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
       - name: Run the conformance suite for ${{ matrix.version.tag }}
-        env:
-          ARGO_CONFORMANCE_VERSION: ${{ matrix.version.tag }}
-          KIND: /home/runner/go/bin/kind
-        run: bash hack/conformance-version.sh "$ARGO_CONFORMANCE_VERSION" workflows:compatibility
+        run: bash hack/conformance-version.sh "${{ matrix.version.tag }}" workflows:compatibility
+
+  runner-conformance:
+    needs:
+      - registry
+      - image
+    if: github.event_name != 'pull_request' && inputs.scope != 'contract'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(needs.registry.outputs.versions) }}
+    name: runner conformance ${{ matrix.version.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: workflows-runner-broker-image
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: workflows-runner-image
+      - name: Load the images and install kind
+        run: |
+          docker load < workflows-runner-broker-image.tar.gz
+          docker load < workflows-runner-image.tar.gz
+          curl -fsSL -o "$RUNNER_TEMP/kind" "https://kind.sigs.k8s.io/dl/v0.30.0/kind-linux-amd64"
+          chmod +x "$RUNNER_TEMP/kind"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Run the runner conformance suite for ${{ matrix.version.tag }}
+        run: bash hack/conformance-runner-version.sh "${{ matrix.version.tag }}" workflows-runner-broker:compatibility workflows-runner:compatibility

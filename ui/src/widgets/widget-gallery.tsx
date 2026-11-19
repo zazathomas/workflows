@@ -2,6 +2,28 @@ import * as React from 'react';
 
 import {uiUrl} from '../shared/base';
 
+function WidgetSnippet({path}: {path: string}) {
+    const [copied, setCopied] = React.useState(false);
+    const html = `<iframe frameborder="0" src="${window.location.origin}${uiUrl(path)}"></iframe>`;
+    return (
+        <div style={{margin: '10px 0'}}>
+            <code style={{display: 'block', padding: 8, background: '#f4f5f7', wordBreak: 'break-all', fontSize: 12}}>{html}</code>
+            <button
+                type='button'
+                className='argo-button argo-button--base-o'
+                style={{marginTop: 6}}
+                onClick={() => {
+                    navigator.clipboard?.writeText(html).then(() => {
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 1500);
+                    });
+                }}>
+                {copied ? 'Copied' : 'Copy embed code'}
+            </button>
+        </div>
+    );
+}
+
 export const WidgetGallery = ({namespace, name, label}: {namespace: string; name?: string; label?: string}) => (
     <div className='white-box' style={{marginTop: 20}}>
         <h3>Widgets</h3>
@@ -61,6 +83,7 @@ export const WidgetGallery = ({namespace, name, label}: {namespace: string; name
                         Preview <i className='fas fa-external-link-alt' />
                     </a>
                 </p>
+                <WidgetSnippet path={path} />
             </>
         ))}
         <p>

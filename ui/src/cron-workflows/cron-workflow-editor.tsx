@@ -8,6 +8,7 @@ import {WorkflowParametersEditor} from '../shared/components/editors/workflow-pa
 import {ObjectEditor} from '../shared/components/object-editor';
 import type {Lang} from '../shared/components/object-parser';
 import {CronWorkflow} from '../shared/models';
+import {JobChanges} from '../workflow-templates/job-changes';
 import {CronWorkflowSpecEditor} from './cron-workflow-spec-editor';
 import {CronWorkflowStatusViewer} from './cron-workflow-status-viewer';
 
@@ -19,7 +20,8 @@ export function CronWorkflowEditor({
     onLangChange,
     cronWorkflow,
     serialization,
-    lang
+    lang,
+    showChanges
 }: {
     cronWorkflow: CronWorkflow;
     serialization: string;
@@ -29,6 +31,8 @@ export function CronWorkflowEditor({
     onError: (error: Error) => void;
     onTabSelected?: (tab: string) => void;
     selectedTabKey?: string;
+    /** Show the managedFields-derived change history (details pages only). */
+    showChanges?: boolean;
 }) {
     return (
         <Tabs
@@ -100,7 +104,16 @@ export function CronWorkflowEditor({
                     key: 'graph',
                     title: 'Graph',
                     content: <GraphViewer workflowDefinition={cronWorkflow} />
-                }
+                },
+                ...(showChanges
+                    ? [
+                          {
+                              key: 'changes',
+                              title: 'Changes',
+                              content: <JobChanges object={cronWorkflow} />
+                          }
+                      ]
+                    : [])
             ]}
         />
     );

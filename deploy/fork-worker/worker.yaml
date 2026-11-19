@@ -1,0 +1,130 @@
+# Example for a single workload namespace and stock controller instance.
+# Install the guarded record policy in deploy/approvals/protected-namespace.yaml.
+# Replace the server image, namespaces, ConfigMap, credential names, and egress settings.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argo-fork-worker
+  namespace: argo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-fork-worker-config
+  namespace: argo
+rules:
+  - apiGroups: ['']
+    resources: [configmaps]
+    resourceNames: [workflow-controller-configmap]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-fork-worker-config
+  namespace: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-fork-worker-config
+subjects:
+  - kind: ServiceAccount
+    namespace: argo
+    name: argo-fork-worker
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-fork-worker
+  namespace: protected-workflows
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflows, workflows/status]
+    verbs: [get, list, watch, update]
+  - apiGroups: ['']
+    resources: [configmaps]
+    verbs: [create, get, list, update]
+  - apiGroups: ['']
+    resources: [secrets]
+    resourceNames: [notification-webhook]
+    verbs: [get]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    resourceNames: [argo-fork-worker]
+    verbs: [get, update]
+---
+apiVersion: coordination.k8s.io/v1
+kind: Lease
+metadata:
+  name: argo-fork-worker
+  namespace: protected-workflows
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-fork-worker
+  namespace: protected-workflows
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-fork-worker
+subjects:
+  - kind: ServiceAccount
+    namespace: argo
+    name: argo-fork-worker
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-notification-tester
+  namespace: protected-workflows
+rules:
+  - apiGroups: [platform.argoproj.io]
+    resources: [notificationtests]
+    verbs: [send]
+  - apiGroups: ['']
+    resources: [configmaps]
+    resourceNames: [argo-notifications]
+    verbs: [get]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argo-fork-worker
+  namespace: argo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argo-fork-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: argo-fork-worker
+    spec:
+      serviceAccountName: argo-fork-worker
+      containers:
+        - name: worker
+          image: workflows:local # Replace with the digest of your fork server image.
+          args: [server, --auth-mode=client, --secure=false, --namespaced, --managed-namespace=protected-workflows]
+          env:
+            - name: ARGO_SERVER_FORK_WORKER_NAMESPACE
+              value: protected-workflows
+            - name: ARGO_SERVER_APPROVAL_NAMESPACE
+              value: protected-workflows
+            - name: ARGO_SERVER_NOTIFICATION_ALLOW_HOSTS
+              value: '' # Empty disables notification delivery.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault

@@ -11,13 +11,13 @@
     padding: 4px;
     border: 0;
     background: transparent;
-    color: #6d7f8b;
+    color: var(--text-muted);
     cursor: pointer;
     line-height: 1;
 
     &:hover,
     &:focus-visible {
-      color: #006f8a;
+      color: var(--accent);
       outline: 2px solid currentColor;
       outline-offset: 2px;
     }

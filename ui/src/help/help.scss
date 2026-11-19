@@ -2,18 +2,21 @@
 
 .help-box {
     min-height: 530px;
-    margin: 30px 10px;
+    margin: var(--space-5) 10px;
     padding: 80px 40px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface);
+    box-shadow: var(--shadow-card);
+    color: var(--text-primary);
     text-align: center;
-    background-color: #fff;
-    box-shadow: 0 0 3px rgba(#000,.3);
 
     &__ico {
         width: 180px;
         height: 180px;
         margin: 0 auto;
         background-size: 100%;
-        opacity: .5;
+        opacity: 0.5;
 
         &--manual {
             background-image: url('assets/images/User-Manual-200.png');
@@ -35,13 +38,15 @@
     }
 
     h3 {
-        margin: 40px 0 60px;
-        font-size: 22px;
+        margin: var(--space-6) 0;
+        color: var(--text-strong);
+        font-size: var(--text-xl);
+        font-weight: 600;
     }
 
     a {
-        font-size: 18px;
-        font-weight: bold;
+        font-size: var(--text-lg);
+        font-weight: 600;
     }
 
     &__link {
@@ -51,24 +56,15 @@
     &__download {
         i {
             width: 30px;
-            font-size: 24px;
+            font-size: var(--text-xl);
             text-align: center;
         }
     }
 }
 
-.theme-dark .help-box {
-    border: 1px solid #334155;
-    background: #1f2937;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-    color: #e5edf5;
-
-    &__ico {
-        opacity: 0.7;
-        filter: invert(1) brightness(1.35);
-    }
-
-    a {
-        color: #9fe8ef;
-    }
+// The help illustrations are light-background PNGs; inverting them is the one
+// theme difference no colour token can express.
+.theme-dark .help-box__ico {
+    opacity: 0.7;
+    filter: invert(1) brightness(1.35);
 }

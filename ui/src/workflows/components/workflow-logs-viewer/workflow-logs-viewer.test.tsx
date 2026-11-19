@@ -60,3 +60,51 @@ test('shows user output but hides Argo internals for both live and archived logs
     expect(screen.getByTestId('log-lines')).toHaveTextContent('my workflow emitted this');
     getLogs.mockRestore();
 });
+
+test('colors the console output without changing the visible text', async () => {
+    window.localStorage.removeItem('SHOW_VERBOSE_POD_LOGS');
+    const getLogs = jest
+        .spyOn(services.workflows, 'getContainerLogs')
+        .mockImplementation(() =>
+            of(
+                {podName: 'pod-1', content: 'time=2026-10-31T12:44:37.208Z level=INFO msg="routine step done"'},
+                {podName: 'pod-1', content: 'time=2026-10-31T12:44:38.208Z level=ERROR msg="database is down"'}
+            )
+        );
+    render(viewer());
+    await waitFor(() => expect(screen.getByTestId('log-lines')).toHaveTextContent('database is down'));
+    const output = screen.getByTestId('log-lines').textContent;
+    // severity styling: green info, red error
+    expect(output).toContain('\u001b[32m');
+    expect(output).toContain('\u001b[31m');
+    // the visible text is unchanged by the styling
+    expect(output).toContain('msg="routine step done"');
+    // eslint-disable-next-line no-control-regex -- matching the ESC control character is the point
+    expect(output.replace(/\u001b\[[0-9;]*m/g, '')).toContain('time=2026-10-31');
+    getLogs.mockRestore();
+});
+
+test('the minimum level filter hides less severe and unlabeled lines', async () => {
+    window.localStorage.removeItem('SHOW_VERBOSE_POD_LOGS');
+    const getLogs = jest
+        .spyOn(services.workflows, 'getContainerLogs')
+        .mockImplementation(() =>
+            of(
+                {podName: 'pod-1', content: 'time=2026-10-31T12:44:37.208Z level=INFO msg="routine step done"'},
+                {podName: 'pod-1', content: 'time=2026-10-31T12:44:38.208Z level=ERROR msg="database is down"'},
+                {podName: 'pod-1', content: 'custom workflow output'}
+            )
+        );
+    render(viewer());
+    await waitFor(() => expect(screen.getByTestId('log-lines')).toHaveTextContent('routine step done'));
+    expect(screen.getByRole('button', {name: 'Copy'})).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Download'})).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', {name: 'Minimum log level'}), {target: {value: 'error'}});
+    await waitFor(() => expect(screen.getByTestId('log-lines')).not.toHaveTextContent('routine step done'));
+    // unlabeled output is treated as info, so it is filtered out too
+    expect(screen.getByTestId('log-lines')).not.toHaveTextContent('custom workflow output');
+    expect(screen.getByTestId('log-lines')).toHaveTextContent('database is down');
+    expect(getLogs).toHaveBeenCalledTimes(2);
+    getLogs.mockRestore();
+});

@@ -1,7 +1,8 @@
 # Browser tests
 
 The fork's mock-backed browser suite checks the submit wizard, navigation, filters, keyboard use, and live-status UI without a cluster.
-Start the UI dev server with `yarn --cwd ui start` and run `make test-ui-e2e` in another terminal.
+Run `make test-ui-e2e`: Playwright starts the UI dev server itself (and reuses one you already have running).
+Set `ARGO_UI_BASE_URL` to run the suite against a server you started elsewhere, such as the container flow in `ui/AGENTS.md`.
 CI runs this suite for each pull request.
 The mock does not prove that a production image works with the upstream controller.
 

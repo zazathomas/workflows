@@ -1,0 +1,9 @@
+{
+    "allowedRegistries": [],
+    "requireDigest": true,
+    "allowRoot": false,
+    "allowEgress": false,
+    "runtime": "",
+    "maxCPUMillis": 0,
+    "maxMemoryMB": 0
+}

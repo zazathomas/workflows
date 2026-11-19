@@ -1,4 +1,4 @@
-import {EMPTY, from, Observable, of} from 'rxjs';
+import {concat, EMPTY, from, Observable, of} from 'rxjs';
 import {catchError, filter, map, mergeMap, switchMap} from 'rxjs/operators';
 
 import {NameFilterKeys} from '../../workflows/components/workflow-filters/workflow-filters';
@@ -8,6 +8,7 @@ import {Event, isWorkflowInCluster, LogEntry, NodeStatus, Workflow, WorkflowList
 import {ResubmitOpts, RetryOpts} from '../models';
 import {SubmitOpts} from '../models/submit-opts';
 import {Pagination} from '../pagination';
+import {isRunnerNode} from '../template-resolution';
 import requests from './requests';
 import {WorkflowDeleteResponse} from './responses';
 import {queryParams} from './utils';
@@ -27,7 +28,24 @@ function hasArtifactLogs(workflow: Workflow, nodeId: string, container: string) 
     return node?.outputs?.artifacts?.some(a => a.name === `${container}-logs`);
 }
 
+// The all-pods view has no node selected; logs archived to the artifact
+// repository can still be shown when any node archived logs for this container.
+function hasAnyArtifactLogs(workflow: Workflow, container: string) {
+    return Object.values(workflow.status.nodes || {}).some(node => node.outputs?.artifacts?.some(a => a.name === `${container}-logs`));
+}
+
 export const WorkflowsService = {
+    runView(namespace: string, view: 'summary' | 'gates', cursor?: string): Promise<WorkflowList> {
+        const params = new URLSearchParams({namespace, view});
+        if (cursor) params.set('continue', cursor);
+        return requests.get(`api/v1/extensions/run-view?${params}`).then(res => res.body as WorkflowList);
+    },
+
+    approvalCount(namespace: string): Promise<number> {
+        const params = new URLSearchParams({namespace, view: 'gate-count'});
+        return requests.get(`api/v1/extensions/run-view?${params}`).then(res => res.body.count as number);
+    },
+
     create(workflow: Workflow, namespace: string) {
         return requests
             .post(`api/v1/workflows/${namespace}`)
@@ -54,6 +72,7 @@ export const WorkflowsService = {
             'items.status.startedAt',
             'items.status.estimatedDuration',
             'items.status.progress',
+            'items.status.synchronization',
             'items.spec.suspend',
             'items.spec.arguments'
         ],
@@ -61,9 +80,10 @@ export const WorkflowsService = {
         nameFilter?: NameFilterKeys,
         createdAfter?: Date,
         finishedBefore?: Date,
-        archiveFilter?: 'all' | 'live' | 'archived'
+        archiveFilter?: 'all' | 'live' | 'archived',
+        substring?: {nameTitleContains?: string; labelContains?: string}
     ) {
-        const params = queryParams({phases, labels, pagination, name, nameFilter, createdAfter, finishedBefore, archiveFilter});
+        const params = queryParams({phases, labels, pagination, name, nameFilter, createdAfter, finishedBefore, archiveFilter, ...substring});
         params.push(`fields=${fields.join(',')}`);
         return requests.get(`api/v1/workflows/${namespace}?${params.join('&')}`).then(res => res.body as WorkflowList);
     },
@@ -273,27 +293,58 @@ export const WorkflowsService = {
                 return from(requests.get(this.getArtifactLogsPath(workflow, nodeId, container, archived)));
             }),
             mergeMap(r => r.text.split('\n')),
-            map(content => ({content, podName: workflow.status.nodes[nodeId].displayName}) as LogEntry),
+            map(content => ({content, podName: workflow.status.nodes[nodeId]?.displayName ?? workflow.status.nodes[nodeId]?.name}) as LogEntry),
             filter(x => !!x.content.match(grep))
         );
     },
 
+    /**
+     * Logs archived to the artifact repository are stored per node, so the
+     * all-pods view (no node selected) reads the logs of every node that
+     * archived logs for this container, in the order the nodes were created.
+     * A node whose archived logs cannot be fetched is skipped so one missing
+     * artifact does not hide the rest; when no node archived logs nothing is
+     * emitted, and the caller falls back to live pod logs.
+     */
+    getContainerLogsFromArtifacts(workflow: Workflow, nodeId: string, container: string, grep: string, archived: boolean): Observable<LogEntry> {
+        if (nodeId) {
+            return this.getContainerLogsFromArtifact(workflow, nodeId, container, grep, archived);
+        }
+        const nodeIds = Object.values(workflow.status.nodes || {})
+            .filter(node => hasArtifactLogs(workflow, node.id, container))
+            .map(node => node.id);
+        if (nodeIds.length === 0) {
+            return EMPTY;
+        }
+        return concat(...nodeIds.map(id => this.getContainerLogsFromArtifact(workflow, id, container, grep, archived).pipe(catchError(() => EMPTY))));
+    },
+
     getContainerLogs(workflow: Workflow, podName: string, nodeId: string, container: string, grep: string, archived: boolean): Observable<LogEntry> {
-        const getLogsFromArtifact = (targetWorkflow = workflow) => this.getContainerLogsFromArtifact(targetWorkflow, nodeId, container, grep, archived);
-        const getLogsFromCluster = () => this.getContainerLogsFromCluster(workflow, podName, container, grep);
+        const getLogsFromArtifacts = (targetWorkflow = workflow) => this.getContainerLogsFromArtifacts(targetWorkflow, nodeId, container, grep, archived);
+        const getLogsFromCluster = () =>
+            isRunnerNode(workflow, workflow.status.nodes[nodeId])
+                ? EMPTY
+                : this.getContainerLogsFromCluster(workflow, podName, container, grep);
+        // whether the artifact repository holds archived logs for this selection:
+        // the selected node's, or any node's in the all-pods view
+        const hasArchivedLogs = (targetWorkflow: Workflow) => (nodeId ? hasArtifactLogs(targetWorkflow, nodeId, container) : hasAnyArtifactLogs(targetWorkflow, container));
 
         // If our workflow was deleted, try to get logs from artifacts.
         if (!isWorkflowInCluster(workflow)) {
-            return getLogsFromArtifact();
+            return getLogsFromArtifacts();
         }
 
-        // Return archived logs when the node has finished and has a <container>-logs artifact for one of its main containers.
+        // Return archived logs once the workflow has finished and logs were
+        // archived: the pods may have been garbage-collected, in which case the
+        // live pod-log stream is empty or unreachable, so the archived copy is
+        // the only source. Live pod logs remain the fallback (e.g. pods kept and
+        // archive disabled).
         return from(this.getWorkflowNodePendingOrRunning(workflow, nodeId)).pipe(
             switchMap(({workflow: updatedWorkflow, isPendingOrRunning}) => {
-                if (!isPendingOrRunning && hasArtifactLogs(updatedWorkflow, nodeId, container)) {
-                    return getLogsFromArtifact(updatedWorkflow).pipe(catchError(getLogsFromCluster));
+                if (!isPendingOrRunning && hasArchivedLogs(updatedWorkflow)) {
+                    return getLogsFromArtifacts(updatedWorkflow).pipe(catchError(getLogsFromCluster));
                 }
-                return getLogsFromCluster().pipe(catchError(() => getLogsFromArtifact(updatedWorkflow)));
+                return getLogsFromCluster().pipe(catchError(() => getLogsFromArtifacts(updatedWorkflow)));
             })
         );
     },

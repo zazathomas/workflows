@@ -1,0 +1,31 @@
+# Per-Job concurrency: at most one run of this Job holds runner jobs at a
+# time; a submit while the cap is reached replaces the previous run
+# (cancel-in-progress).
+#
+# The server submit path injects the equivalent synchronization mutex and
+# stops the previous run; a kubectl-applied workflow cannot bypass the cap
+# (the dispatcher counts the Job's claim leases). Try "queue" and "reject"
+# for the other on-conflict behaviours.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: job-concurrency-replace
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/description: |
+      At most one run at a time; a new submit replaces the running one.
+    workflows.argoproj.io/max-concurrent-runs: '1'
+    workflows.argoproj.io/on-conflict: replace
+spec:
+  entrypoint: main
+  serviceAccountName: wf-runner
+  archiveLogs: false
+  templates:
+    - name: main
+      plugin:
+        runner:
+          pool: build
+          image: docker.io/library/busybox:1.36@sha256:650fd57367e5d6f0b5f8732f0e5d88f5d0df8e8f0b9f0e2b0f9a4b8e5f9d0a1
+          command: [sh, -c]
+          args: ['echo "the one active run"; sleep 300']
+          timeout: 10m

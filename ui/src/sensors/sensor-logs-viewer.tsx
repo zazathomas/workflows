@@ -8,6 +8,7 @@ import {Links} from '../shared/components/links';
 import {Sensor} from '../shared/models';
 import {services} from '../shared/services';
 import {FullHeightLogsViewer} from '../workflows/components/workflow-logs-viewer/full-height-logs-viewer';
+import {colorizeLogLine} from '../workflows/components/workflow-logs-viewer/log-colorizer';
 
 function identity<T>(value: T) {
     return () => value;
@@ -42,6 +43,8 @@ export function SensorLogsViewer({
                         .map(([key, value]) => key + '=' + value)
                         .join(', ') + '\n'
             ),
+            // style for the dark console; the visible text is unchanged
+            map(line => colorizeLogLine(line)),
             publishReplay(),
             refCount()
         );

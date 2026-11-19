@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -47,6 +48,7 @@ import (
 	workflowtemplatepkg "github.com/argoproj/argo-workflows/v4/pkg/apiclient/workflowtemplate"
 	"github.com/argoproj/argo-workflows/v4/pkg/apis/workflow/v1alpha1"
 	"github.com/argoproj/argo-workflows/v4/server/apiserver/accesslog"
+	"github.com/argoproj/argo-workflows/v4/server/approvals"
 	"github.com/argoproj/argo-workflows/v4/server/artifacts"
 	"github.com/argoproj/argo-workflows/v4/server/auth"
 	authcookie "github.com/argoproj/argo-workflows/v4/server/auth/cookie"
@@ -55,10 +57,12 @@ import (
 	"github.com/argoproj/argo-workflows/v4/server/cache"
 	"github.com/argoproj/argo-workflows/v4/server/clusterworkflowtemplate"
 	"github.com/argoproj/argo-workflows/v4/server/cronworkflow"
+	"github.com/argoproj/argo-workflows/v4/server/environment"
 	"github.com/argoproj/argo-workflows/v4/server/event"
 	"github.com/argoproj/argo-workflows/v4/server/eventsource"
 	"github.com/argoproj/argo-workflows/v4/server/info"
 	"github.com/argoproj/argo-workflows/v4/server/logout"
+	"github.com/argoproj/argo-workflows/v4/server/notify"
 	"github.com/argoproj/argo-workflows/v4/server/parameter"
 	"github.com/argoproj/argo-workflows/v4/server/runaction"
 	"github.com/argoproj/argo-workflows/v4/server/sensor"
@@ -233,7 +237,8 @@ func (as *argoServer) Run(ctx context.Context, port int, browserOpenFunc func(st
 
 	// Rather than attempt to run CI with an artifact server alongside
 	// lets just have a way to disable the checks in argo-server
-	if os.Getenv("CI_ONLY_DISABLE_ARTIFACT_SERVER_CHECKS") != "true" {
+	workerNamespace := env.GetString("ARGO_SERVER_FORK_WORKER_NAMESPACE", "")
+	if workerNamespace == "" && os.Getenv("CI_ONLY_DISABLE_ARTIFACT_SERVER_CHECKS") != "true" {
 		// Validate artifact driver images against server pod images
 		if validateErr := as.validateArtifactDriverImages(ctx, config); validateErr != nil {
 			log.WithError(validateErr).Error(ctx, "failed to validate artifact driver images")
@@ -279,6 +284,13 @@ func (as *argoServer) Run(ctx context.Context, port int, browserOpenFunc func(st
 		// disable the archiving - and still read old records
 		wfArchive = persist.NewWorkflowArchive(sessionProxy, persistence.GetClusterName(), as.managedNamespace, instanceIDService)
 	}
+	if workerNamespace != "" {
+		if err := as.runForkWorker(ctx, workerNamespace, instanceIDService, hydrator.New(offloadRepo)); err != nil {
+			log.WithError(err).Error(ctx, "fork worker stopped")
+			os.Exit(1)
+		}
+		return
+	}
 	resourceCacheNamespace := getResourceCacheNamespace(as.managedNamespace)
 	wftmplStore, err := workflowtemplate.NewInformer(as.restConfig, resourceCacheNamespace)
 	if err != nil {
@@ -322,7 +334,28 @@ func (as *argoServer) Run(ctx context.Context, port int, browserOpenFunc func(st
 		log.WithError(err).Error(ctx, "Invalid run action host policy")
 		os.Exit(1)
 	}
-	httpServer := as.newHTTPServer(ctx, port, artifactServer, allowedHosts, actionHosts)
+	// Fork endpoints reserve state; a separate worker applies it.
+	var notifyHandler http.Handler
+	if namespace := env.GetString("ARGO_SERVER_NOTIFICATION_NAMESPACE", ""); namespace != "" {
+		if !as.validExtensionNamespace(namespace) {
+			log.Error(ctx, "ARGO_SERVER_NOTIFICATION_NAMESPACE must name a namespace managed by this server")
+			os.Exit(1)
+		}
+		notifyHandler = notify.NewTestHandler(notify.NewController(notify.ControllerConfig{
+			Kube: as.clients.Kubernetes, Instance: instanceIDService, Durable: true, ManagedNamespace: namespace, Log: log,
+		}), log)
+	}
+	// Enable approvals only in a namespace with the decision-store RBAC installed.
+	var approvalsHandler http.Handler
+	if namespace := env.GetString("ARGO_SERVER_APPROVAL_NAMESPACE", ""); namespace != "" {
+		if !as.validExtensionNamespace(namespace) {
+			log.Error(ctx, "ARGO_SERVER_APPROVAL_NAMESPACE must name a namespace managed by this server")
+			os.Exit(1)
+		}
+		approvalsHandler = approvals.NewHandler(as.clients.Workflow, as.clients.Kubernetes, hydrator.New(offloadRepo), log).WithScope(namespace, instanceIDService).WithWorker()
+	}
+	runView := workflow.NewRunView(wfStore, hydrator.New(offloadRepo))
+	httpServer := as.newHTTPServer(ctx, port, artifactServer, allowedHosts, actionHosts, notifyHandler, approvalsHandler, runView)
 
 	// Start listener
 	var conn net.Listener
@@ -367,6 +400,7 @@ func (as *argoServer) Run(ctx context.Context, port int, browserOpenFunc func(st
 		cwftmplInformer.Run(ctx, as.stopCh)
 	}
 	go eventServer.Run(ctx, as.stopCh)
+	go wfStore.ResolvePackedGates(ctx, hydrator.New(offloadRepo))
 	go workflowServer.Run(as.stopCh)
 	go func() { as.checkServeErr(ctx, "httpServer", muxServer.Serve(conn)) }()
 	url := "http://localhost" + address
@@ -432,7 +466,7 @@ func (as *argoServer) newGRPCServer(ctx context.Context, instanceIDService insta
 
 // newHTTPServer returns the HTTP handler to serve HTTP/HTTPS requests. This is implemented
 // using grpc-gateway as a proxy to the gRPC server.
-func (as *argoServer) newHTTPServer(ctx context.Context, port int, artifactServer *artifacts.ArtifactServer, parameterSourceAllowHosts, runActionAllowHosts []string) http.Handler {
+func (as *argoServer) newHTTPServer(ctx context.Context, port int, artifactServer *artifacts.ArtifactServer, parameterSourceAllowHosts, runActionAllowHosts []string, notifyTestHandler, approvalsHandler, runView http.Handler) http.Handler {
 	log := logging.RequireLoggerFromContext(ctx)
 	endpoint := fmt.Sprintf("localhost:%d", port)
 	ipKeyFunc := httplimit.IPKeyFunc()
@@ -490,7 +524,21 @@ func (as *argoServer) newHTTPServer(ctx context.Context, port int, artifactServe
 		AllowedHosts: parameterSourceAllowHosts,
 	})
 	mux.Handle("/api/v1/extensions/parameter-options", as.authenticatedHandler(parameterOptionsHandler))
+	// Environment viewer: the caller's own RBAC on configmaps and secrets
+	// decides what is listed, so it is refused in server auth mode.
+	mux.Handle("/api/v1/extensions/environment", as.authenticatedHandler(environment.NewHandler()))
+	mux.Handle("/api/v1/extensions/run-view", as.authenticatedHandler(runView))
 	mux.Handle("/api/v1/extensions/run-action-policy", as.authenticatedPolicyHandler(runaction.NewPolicyHandler(runActionAllowHosts)))
+	// Notification test-send (docs/notifications.md): the caller's own
+	// access to the namespace's ConfigMap authorises it.
+	if notifyTestHandler != nil {
+		mux.Handle(notify.TestPathPrefix+"/", as.authenticatedInNamespace(notifyTestHandler, notify.TestNamespace))
+	}
+	// Approval decisions (docs/approvals.md): the caller's own RBAC on the
+	// workflow, plus the Job's approver scoping.
+	if approvalsHandler != nil {
+		mux.Handle(approvals.PathPrefix+"/", as.authenticatedInNamespace(approvalsHandler, approvals.Namespace))
+	}
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		// we must delete this header for API request to prevent "stream terminated by RST_STREAM with error code: PROTOCOL_ERROR" error
@@ -539,15 +587,38 @@ func (as *argoServer) newHTTPServer(ctx context.Context, port int, artifactServe
 }
 
 func (as *argoServer) authenticatedHandler(next http.Handler) http.Handler {
-	return as.authenticateExtension(next, true)
+	return as.authenticateExtension(next, true, nil)
 }
 
 func (as *argoServer) authenticatedPolicyHandler(next http.Handler) http.Handler {
-	return as.authenticateExtension(next, false)
+	return as.authenticateExtension(next, false, nil)
 }
 
-func (as *argoServer) authenticateExtension(next http.Handler, requiresCallerRBAC bool) http.Handler {
+func (as *argoServer) authenticatedInNamespace(next http.Handler, resolve func(*http.Request) string) http.Handler {
+	return as.authenticateExtension(next, true, resolve)
+}
+
+func (as *argoServer) authenticateExtension(next http.Handler, requiresCallerRBAC bool, resolve func(*http.Request) string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var namespace string
+		values := r.URL.Query()["namespace"]
+		if resolve != nil {
+			namespace = resolve(r)
+			if namespace == "" {
+				http.NotFound(w, r)
+				return
+			}
+		} else if len(values) > 0 && requiresCallerRBAC {
+			namespace = values[0]
+		}
+		if requiresCallerRBAC && (len(values) > 1 || (len(values) == 1 && values[0] != namespace)) {
+			http.Error(w, "conflicting namespace", http.StatusBadRequest)
+			return
+		}
+		if requiresCallerRBAC && as.managedNamespace != "" && namespace != as.managedNamespace {
+			http.NotFound(w, r)
+			return
+		}
 		md := metadata.New(nil)
 		if authorization := r.Header.Get("Authorization"); authorization != "" {
 			md.Set(authcookie.AuthorizationMetadataKey, authorization)
@@ -562,7 +633,7 @@ func (as *argoServer) authenticateExtension(next http.Handler, requiresCallerRBA
 			logger = logging.NewSlogLogger(logging.Info, logging.Text)
 		}
 		ctx := logging.WithLogger(r.Context(), logger)
-		authenticatedContext, err := as.gatekeeper.ContextWithRequest(metadata.NewIncomingContext(ctx, md), types.NamespaceHolder(r.URL.Query().Get("namespace")))
+		authenticatedContext, err := as.gatekeeper.ContextWithRequest(metadata.NewIncomingContext(ctx, md), types.NamespaceHolder(namespace))
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
@@ -570,7 +641,7 @@ func (as *argoServer) authenticateExtension(next http.Handler, requiresCallerRBA
 			return
 		}
 		if requiresCallerRBAC && !auth.CanUseParameterSources(authenticatedContext) {
-			http.Error(w, "parameter sources require client auth or SSO with RBAC", http.StatusForbidden)
+			http.Error(w, "this extension requires client auth or SSO with RBAC", http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(authenticatedContext))
@@ -687,6 +758,20 @@ func mustRegisterGWHandler(ctx context.Context, register registerFunc, mux *runt
 	if err != nil {
 		panic(err)
 	}
+}
+
+// hostSet converts the parsed host allowlist into the set the notification
+// controller checks against.
+func (as *argoServer) validExtensionNamespace(namespace string) bool {
+	return len(validation.IsDNS1123Label(namespace)) == 0 && (as.managedNamespace == "" || namespace == as.managedNamespace)
+}
+
+func hostSet(hosts []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(hosts))
+	for _, host := range hosts {
+		set[host] = struct{}{}
+	}
+	return set
 }
 
 // checkServeErr checks the error from a .Serve() call to decide if it was a graceful shutdown

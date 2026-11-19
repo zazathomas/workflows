@@ -2,19 +2,12 @@
 
 This image replaces the upstream Argo Workflows server and adds the embedded UI.
 The controller, executor images, and CRDs stay on the upstream release you already run, chosen from [the compatibility matrix](compatibility.md).
-
-Use the path that already owns your server Deployment:
-
-- [Helm](#helm) when `helm list -n argo` shows your Argo release.
-- [Manifests](#manifests) when you apply upstream's release manifest or your own Kustomize setup.
-
-Finish one path before touching the other; both write the same Deployment.
-For the first rollout, use a disposable installation.
+Use the path that already owns your server Deployment, and finish one path before touching the other: both write the same Deployment.
+For a first rollout, use a disposable installation.
 
 ## Helm
 
-Keep Helm in control of the Deployment, Service, ingress, service account, and RBAC.
-Use the chart version from the compatibility matrix, and leave `controller.image`, `executor.image`, and `images.tag` alone.
+Keep Helm in control of the Deployment, Service, ingress, service account, and RBAC, and leave `controller.image`, `executor.image`, and `images.tag` alone.
 
 1. Copy [the values override](../deploy/helm-server-values.yaml), set the image to the published digest, and add the allowlists to your existing `server.extraEnv` list.
    That list is replaced, not merged, so start from `helm get values RELEASE -n argo`.
@@ -32,7 +25,7 @@ Use the chart version from the compatibility matrix, and leave `controller.image
          value: 'github.com,login.microsoftonline.com'
    ```
 
-2. Preview the change, then upgrade.
+2. Preview, then upgrade with the chart version from the compatibility matrix:
 
    ```bash
    helm get values RELEASE -n argo -o yaml > /tmp/argo-values.before.yaml
@@ -42,21 +35,17 @@ Use the chart version from the compatibility matrix, and leave `controller.image
      --reuse-values -f deploy/helm-server-values.yaml --atomic --timeout 10m
    ```
 
-The values and rendered output can contain credentials, so keep them out of version control.
+Values and rendered output can contain credentials, so keep them out of version control.
 
 ## Manifests
 
-Install upstream's own manifest, patched with this fork's server image and settings before anything reaches the cluster.
-Follow [upstream's installation guide](https://argo-workflows.readthedocs.io/en/latest/installation/) for the install variant you need: cluster, namespace, or managed namespace.
-Upstream requires server-side apply for the full v4 CRDs.
+[`deploy/manifests/`](../deploy/manifests/kustomization.yaml) renders the upstream release asset and applies [one patch](../deploy/manifests/argo-server-patch.yaml); no Argo YAML is stored here.
+Follow [upstream's installation guide](https://argo-workflows.readthedocs.io/en/latest/installation/) for the install variant you need (cluster, namespace, or managed namespace); the full v4 CRDs need server-side apply.
 
-[`deploy/manifests/`](../deploy/manifests/kustomization.yaml) takes that manifest straight from the upstream GitHub release asset and applies [one small patch](../deploy/manifests/argo-server-patch.yaml) to it.
-No Argo YAML is stored in this repository.
+1. Set the image digest and allowlist values in `deploy/manifests/argo-server-patch.yaml`.
+   The patch merges `env` by name and replaces `args`, which is how the auth mode changes.
 
-1. Set the image digest and the allowlist values in `deploy/manifests/argo-server-patch.yaml`.
-   The patch merges `env` entries by name and replaces `args`, which is how the auth mode changes.
-
-2. Render and apply once.
+2. Render and apply:
 
    ```bash
    kubectl kustomize deploy/manifests > /tmp/argo-install.yaml
@@ -66,16 +55,32 @@ No Argo YAML is stored in this repository.
    kubectl -n argo rollout status deployment/argo-server --timeout=10m
    ```
 
-The rendered file contains CRDs, the controller, and the patched server.
-On an existing installation, review `kubectl diff -f /tmp/argo-install.yaml` before applying.
-If you previously changed this Deployment with `kubectl set image`, `kubectl set env`, or `kubectl patch`, that first apply may report field conflicts; add `--force-conflicts` once.
+Review `kubectl diff -f /tmp/argo-install.yaml` on an existing installation; if you previously changed the Deployment with `kubectl set image`, `set env`, or `patch`, that first apply may report field conflicts, so add `--force-conflicts` once.
 
-Rendering fetches the release asset, so it needs network access.
-The URL in `kustomization.yaml` is pinned to an upstream release tag; `python3 hack/upstream-install.py --list` prints every registered release with its install URL and checksum.
-For an offline or air-gapped build, download that file and point `resources` at the local copy instead.
+Rendering fetches the release asset, so it needs network access; `python3 hack/upstream-install.py --list` prints each registered release's install URL and chart version.
+For an offline build, download that file and point `resources` at the local copy.
+To move to another release, change the tag in the URL and render again: the patch is reapplied every time.
+For GitOps, commit the patch and your manifest source instead of editing the cluster.
 
-To move to another release, change the tag in the URL and render again. The patch is reapplied every time, so the image and settings do not drift.
-For GitOps, commit this patch and your own manifest source rather than editing the cluster by hand.
+## Remote runners
+
+Deploy the [standalone runner broker and stock executor plugin](runner-broker.md) for workflows that run on remote Linux hosts.
+The Argo server deployment does not need runner credentials, configuration, or extra RBAC.
+
+## Fork worker
+
+Deploy the [fork worker example](../deploy/fork-worker/worker.yaml) to use approvals or notifications.
+Use the same fork image digest on the worker and API, and set one workload namespace per worker deployment.
+Set the stock controller ConfigMap name with `--configmap` if you don't use the default; grant access to that ConfigMap only.
+Replicas in the example contend for one namespace Lease, so only one reads Workflow events and runs timers.
+Use a separate service account and the [egress policy example](../deploy/fork-worker/network-policy.example.yaml) on the worker.
+If the stock controller offloads node status, grant the worker access to the same persistence configuration and the required database connection.
+
+Install the record admission policy from [the protected namespace examples](../deploy/approvals/protected-namespace.yaml) and label the namespace `platform.argoproj.io/protect-extension-state=true` before enabling the extensions.
+Use the separate `protect-runs` label only where you intend to restrict all workflow writes.
+On the API set the approval and test-send namespace as needed; set the outbound notification allowlist only on the worker.
+If you previously installed `argo-server-notify` cluster-wide, remove that ClusterRoleBinding and ClusterRole after the worker is ready.
+Rolling back roles removes delivery and approval processing; keep their state ConfigMaps until you have exported or processed them.
 
 ## Allowlists
 

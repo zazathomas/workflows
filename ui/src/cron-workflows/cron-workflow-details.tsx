@@ -9,8 +9,10 @@ import {uiUrl} from '../shared/base';
 import {ErrorNotice} from '../shared/components/error-notice';
 import {openLinkWithKey} from '../shared/components/links';
 import {Loading} from '../shared/components/loading';
+import {Timestamp} from '../shared/components/timestamp';
 import {ZeroState} from '../shared/components/zero-state';
 import {Context} from '../shared/context';
+import {getNextScheduledTimes} from '../shared/cron';
 import {historyUrl} from '../shared/history';
 import * as models from '../shared/models';
 import {CronWorkflow, Link, Workflow} from '../shared/models';
@@ -192,6 +194,13 @@ export function CronWorkflowDetails({match, location, history}: RouteComponentPr
         return items;
     };
 
+    // Upcoming runs: the next executions of each schedule, soonest first.
+    const upcoming: Date[] = (cronWorkflow && !cronWorkflow.spec.suspend ? cronWorkflow.spec.schedules || [] : []).flatMap(schedule =>
+        getNextScheduledTimes(schedule, cronWorkflow.spec.timezone, 3)
+    );
+    upcoming.sort((a, b) => a.getTime() - b.getTime());
+    const nextRuns = upcoming.slice(0, 5);
+
     return (
         <Page
             title='Cron Workflow Details'
@@ -207,6 +216,22 @@ export function CronWorkflowDetails({match, location, history}: RouteComponentPr
             }}>
             <>
                 <ErrorNotice error={error} />
+                {cronWorkflow && nextRuns.length > 0 && (
+                    <div className='cron-workflow-details__upcoming'>
+                        <h2>Upcoming runs</h2>
+                        <p>
+                            The next {nextRuns.length} execution{nextRuns.length === 1 ? '' : 's'} of this schedule
+                            {cronWorkflow.spec.timezone ? ` (${cronWorkflow.spec.timezone})` : ' (UTC, estimated)'}:
+                        </p>
+                        <ul className='cron-workflow-details__upcoming-list'>
+                            {nextRuns.map(run => (
+                                <li key={run.toISOString()}>
+                                    <i className='fa fa-clock' aria-hidden='true' /> <Timestamp date={run} />
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
                 {!cronWorkflow ? (
                     <Loading />
                 ) : (
@@ -219,6 +244,7 @@ export function CronWorkflowDetails({match, location, history}: RouteComponentPr
                         onError={setError}
                         selectedTabKey={tab}
                         onTabSelected={setTab}
+                        showChanges={true}
                     />
                 )}
                 <SlidingPanel isShown={!!sidePanel} onClose={() => setSidePanel(null)}>

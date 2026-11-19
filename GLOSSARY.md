@@ -1,7 +1,7 @@
 # workflows glossary
 
 Terms the UI uses to distinguish reusable work from its executions, with the Argo Workflows resource behind each one.
-See [the README](README.md#ui-terminology-and-argo-workflows) for the full mapping.
+See [the README](README.md#ui-terminology) for the full mapping.
 
 ## Language
 

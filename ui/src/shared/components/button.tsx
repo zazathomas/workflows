@@ -23,6 +23,6 @@ export const Button = ({
         className={'argo-button ' + (!outline ? 'argo-button--base' : 'argo-button--base-o') + ' ' + (className || '')}
         title={title}
         onClick={onClick}>
-        {icon && <i className={'fa fa-' + icon} />} {children}
+        {icon && <i className={'fa fa-' + icon} aria-hidden='true' />} {children}
     </button>
 );

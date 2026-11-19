@@ -1,0 +1,7 @@
+{
+    "allowedRegistries": ["docker.io", "ghcr.io", "registry.k8s.io"],
+    "requireDigest": true,
+    "allowRoot": false,
+    "allowEgress": false,
+    "runtime": "sysbox-runc"
+}

@@ -304,7 +304,7 @@ func (r *workflowArchive) ListWorkflows(ctx context.Context, options sutils.List
 }
 
 func (r *workflowArchive) CountWorkflows(ctx context.Context, options sutils.ListOptions) (int64, error) {
-	if options.Limit > 0 && options.Offset > 0 {
+	if options.Limit > 0 && options.Offset > 0 && !options.HasSubstringSearch() {
 		return r.countWorkflowsOptimized(ctx, options)
 	}
 
@@ -312,7 +312,7 @@ func (r *workflowArchive) CountWorkflows(ctx context.Context, options sutils.Lis
 	err := r.sessionProxy.With(ctx, func(s db.Session) error {
 		total := &archivedWorkflowCount{}
 
-		if len(options.LabelRequirements) == 0 {
+		if len(options.LabelRequirements) == 0 && !options.HasSubstringSearch() {
 			selector := s.SQL().
 				Select(db.Raw("count(*) as total")).
 				From(archiveTableName).
@@ -491,7 +491,7 @@ func (r *workflowArchive) HasMoreWorkflows(ctx context.Context, options sutils.L
 			}
 		}
 
-		if len(options.LabelRequirements) > 0 {
+		if len(options.LabelRequirements) > 0 || options.HasSubstringSearch() {
 			var err error
 			selector, err = BuildArchivedWorkflowSelector(selector, archiveTableName, archiveLabelsTableName, r.dbType, options, false)
 			if err != nil {

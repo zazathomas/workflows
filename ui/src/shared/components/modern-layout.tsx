@@ -8,8 +8,20 @@ import './modern-layout.scss';
 
 type Theme = 'light' | 'dark';
 
+export interface ModernLayoutNavItem {
+    path: string;
+    iconClassName: string;
+    title: string;
+    group?: string;
+    activePaths?: string[];
+    /** Live badge count (for example pending approvals); hidden when undefined or zero. */
+    badgeCount?: number;
+    /** Attention dot: a small amber marker on the icon when the area needs attention (for example a pending approval request on Runs). */
+    attention?: boolean;
+}
+
 export interface ModernLayoutProps {
-    navItems: Array<{path: string; iconClassName: string; title: string; group?: string; activePaths?: string[]}>;
+    navItems: Array<ModernLayoutNavItem>;
     version?: () => React.ReactElement | null;
     navBarStyle?: {backgroundColor?: string};
     history: History;
@@ -182,14 +194,14 @@ export function ModernLayout(props: ModernLayoutProps) {
                         <React.Fragment key={item.path + item.title}>
                             {(index === 0 || props.navItems[index - 1].group !== item.group) && <div className='modern-layout__section-label'>{item.group || 'Overview'}</div>}
                             <button
-                                className={`modern-layout__item ${[item.path, ...(item.activePaths || [])].some(path => isActiveRoute(locationPath, path)) ? 'active' : ''}`}
+                                className={`modern-layout__item ${[item.path, ...(item.activePaths || [])].some(path => isActiveRoute(locationPath, path)) ? 'active' : ''} ${item.attention ? 'has-attention' : ''}`}
                                 title={item.title}
                                 aria-label={item.title}
                                 aria-current={[item.path, ...(item.activePaths || [])].some(path => isActiveRoute(locationPath, path)) ? 'page' : undefined}
                                 onMouseEnter={event => {
                                     if (!navExpanded) {
                                         setHoveredItem({
-                                            title: item.title,
+                                            title: item.badgeCount ? `${item.title} (${item.badgeCount})` : item.title,
                                             top: event.currentTarget.getBoundingClientRect().top + event.currentTarget.getBoundingClientRect().height / 2
                                         });
                                     }
@@ -205,9 +217,13 @@ export function ModernLayout(props: ModernLayoutProps) {
                                 }}
                                 onBlur={() => setHoveredItem(undefined)}
                                 onClick={() => navigate(item.path)}>
-                                <i className='modern-layout__item-chevron fa fa-angle-right' aria-hidden='true' />
                                 <i className={item.iconClassName} aria-hidden='true' />
                                 <span>{item.title}</span>
+                                {item.badgeCount !== undefined && item.badgeCount > 0 && (
+                                    <span className='modern-layout__item-badge' aria-label={`${item.badgeCount} pending ${item.title.toLowerCase()}`}>
+                                        {item.badgeCount > 99 ? '99+' : item.badgeCount}
+                                    </span>
+                                )}
                             </button>
                         </React.Fragment>
                     ))}

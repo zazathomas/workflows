@@ -1,6 +1,6 @@
 import {Workflow} from '../../../shared/models';
 
-export const OPTIONAL_COLUMNS = ['namespace', 'started', 'finished', 'duration', 'progress', 'message', 'details', 'archived'] as const;
+export const OPTIONAL_COLUMNS = ['namespace', 'started', 'finished', 'duration', 'progress', 'message', 'details', 'archived', 'startedBy'] as const;
 export type OptionalColumn = (typeof OPTIONAL_COLUMNS)[number];
 export type SortColumn = 'name' | 'status' | 'started' | 'finished';
 export type SortDirection = 'ascending' | 'descending';

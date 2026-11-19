@@ -1,5 +1,18 @@
 .zero-state {
-    margin: 20px;
+    margin: var(--space-5) 0;
+    text-align: center;
+
+    h4 {
+        margin-bottom: var(--space-2);
+        color: var(--text-strong);
+        font-size: var(--text-md);
+        font-weight: 600;
+    }
+
+    p {
+        margin: 0;
+        color: var(--text-secondary);
+    }
 }
 
 // Events pages place the zero state directly beneath a toolbar with create actions.

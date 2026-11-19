@@ -241,7 +241,7 @@ test('the submit panel shows parameter descriptions in the dark theme', async ({
     await page.goto('/workflows/argo?sidePanel=submit-new-workflow&template=sample-job');
     const description = page.getByText('Text the job prints when it runs.');
     await expect(description).toBeVisible();
-    await expect(page.getByRole('textbox', {name: 'message'})).toHaveAttribute('aria-describedby', 'parameter-message-0-description');
+    await expect(page.getByRole('textbox', {name: 'message', exact: true})).toHaveAttribute('aria-describedby', 'parameter-message-0-description');
 });
 
 test('shows the workflows name on a run page', async ({page}) => {
@@ -448,6 +448,7 @@ test('cluster jobs remain available while namespace template pages change', asyn
     await expect(page.getByRole('link', {name: 'Run job second-job'})).toBeVisible();
     await expect(page.getByRole('link', {name: 'Run cluster job shared-job'})).toBeVisible();
     await expect(page.getByText('Namespace templates are paginated; cluster templates appear on every namespace page.')).toBeVisible();
+    await expect(page.getByText('Results cannot be globally sorted when paginated')).toBeVisible();
 });
 
 test('cluster listing permission failure leaves namespace jobs usable', async ({page}) => {
@@ -480,7 +481,7 @@ test('catalog submission uses an isolated API and navigates to the run', async (
     const dialog = page.getByRole('dialog', {name: 'job panel'});
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole('heading', {name: 'Run job'})).toBeVisible();
-    await dialog.getByRole('textbox', {name: 'message'}).fill('hello');
+    await dialog.getByRole('textbox', {name: 'message', exact: true}).fill('hello');
     await dialog.getByRole('button', {name: 'Run job', exact: true}).click();
     await expect(page).toHaveURL(/\/workflows\/argo\/sample-run/);
     expect(submissions).toHaveLength(1);
@@ -491,7 +492,7 @@ test('failure preserves inputs and allows retry', async ({page}) => {
     const submissions = await mockApi(page, true);
     await page.goto('/workflow-templates/argo/sample-job?sidePanel=submit');
     const dialog = page.getByRole('dialog', {name: 'job panel'});
-    const input = dialog.getByRole('textbox', {name: 'message'});
+    const input = dialog.getByRole('textbox', {name: 'message', exact: true});
     await input.fill('retry value');
     await dialog.getByRole('button', {name: 'Run job', exact: true}).click();
     await expect(dialog.getByRole('alert')).toContainText(/Submission failed/);
@@ -546,6 +547,18 @@ test('run name and label search modes retain applied filters', async ({page}) =>
     await page.getByLabel('Run search filter').selectOption('name');
     await expect(page.getByRole('combobox', {name: 'Run name or title contains'})).toHaveValue('sample');
     await expect(page.getByLabel('Active filters')).toContainText('Label contains: plat');
+});
+
+test('the filtered runs empty state offers the panel label for clearing filters', async ({page}) => {
+    await mockApi(page);
+    await page.goto('/workflows/argo');
+    await page.getByRole('combobox', {name: 'Run name or title contains'}).fill('nothing-matches');
+    const emptyState = page.locator('.zero-state');
+    await expect(emptyState.getByRole('heading', {name: 'No matching runs'})).toBeVisible();
+    await expect(emptyState.getByRole('button', {name: 'Clear all'})).toBeVisible();
+    await expect(page.getByRole('button', {name: 'Clear filters'})).toHaveCount(0);
+    await emptyState.getByRole('button', {name: 'Clear all'}).click();
+    await expect(page.getByRole('rowheader').filter({hasText: 'sample-run'})).toBeVisible();
 });
 
 test('run label contains searches label keys and values across server pages', async ({page}) => {

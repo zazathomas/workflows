@@ -20,6 +20,7 @@ import {WorkflowTemplate} from '../shared/models';
 import {fetchAllPages, matchesLabelContains, matchesNameOrTitle, searchPageOffset} from '../shared/name-title-search';
 import * as nsUtils from '../shared/namespaces';
 import {Pagination, parseLimit} from '../shared/pagination';
+import {SavedView, SavedViewsBar, viewKey} from '../shared/saved-views';
 import {ScopedLocalStorage} from '../shared/scoped-local-storage';
 import {services} from '../shared/services';
 import {useCollectEvent} from '../shared/use-collect-event';
@@ -48,6 +49,13 @@ export function WorkflowTemplateList({match, location, history}: RouteComponentP
     const {navigation} = useContext(Context);
 
     const storage = new ScopedLocalStorage('WorkflowTemplateListOptions');
+    const viewsStorage = new ScopedLocalStorage('WorkflowTemplateListViews');
+
+    // built-in view tabs: named groups of Jobs (Semaphore views / Rundeck job groups)
+    const BUILT_IN_JOB_VIEWS: SavedView[] = [
+        {name: 'Namespace jobs', builtIn: true, filters: {jobType: 'workflow'}},
+        {name: 'Cluster jobs', builtIn: true, filters: {jobType: 'cluster'}}
+    ];
     const savedPaginationLimit = storage.getItem('paginationLimit', 500);
 
     // state for URL and query parameters
@@ -70,6 +78,37 @@ export function WorkflowTemplateList({match, location, history}: RouteComponentP
         offset: queryParams.get('offset'),
         limit: parseLimit(queryParams.get('limit')) ?? savedPaginationLimit
     });
+
+    // saved views (view tabs) over the Job filters
+    const [customViews, setCustomViews] = useState<SavedView[]>(() => viewsStorage.getItem('views', [] as SavedView[]));
+    const currentJobFilters = {
+        name: namePattern || undefined,
+        labelContains: labelContains || undefined,
+        jobType: jobType !== 'both' ? jobType : undefined,
+        labels: labels.length > 0 ? labels : undefined
+    };
+    const currentJobViewKey = viewKey(currentJobFilters);
+
+    function applyJobView(view: SavedView) {
+        const filters = view.filters;
+        setNamePattern((filters.name as string) || '');
+        setLabelContains((filters.labelContains as string) || '');
+        setJobType(filters.jobType === 'workflow' || filters.jobType === 'cluster' ? (filters.jobType as JobTypeFilter) : 'both');
+        setLabels(((filters.labels as string[]) || []).slice());
+        setPagination(current => ({...current, offset: undefined}));
+    }
+
+    function saveJobView(name: string) {
+        const next = customViews.filter(view => view.name !== name).concat({name, filters: currentJobFilters});
+        viewsStorage.setItem('views', next, [] as SavedView[]);
+        setCustomViews(next);
+    }
+
+    function deleteJobView(view: SavedView) {
+        const next = customViews.filter(item => item.name !== view.name);
+        viewsStorage.setItem('views', next, [] as SavedView[]);
+        setCustomViews(next);
+    }
 
     useEffect(
         useQueryParams(history, p => {
@@ -221,6 +260,7 @@ export function WorkflowTemplateList({match, location, history}: RouteComponentP
                 }
             }}>
             <div>
+                <SavedViewsBar views={BUILT_IN_JOB_VIEWS.concat(customViews)} currentKey={currentJobViewKey} onApply={applyJobView} onSave={saveJobView} onDelete={deleteJobView} />
                 <WorkflowTemplateFilters
                     templates={[...(templates || []), ...(clusterTemplates || [])]}
                     namespace={namespace}
@@ -270,7 +310,14 @@ export function WorkflowTemplateList({match, location, history}: RouteComponentP
                                 {namePattern || labelContains || labels.length ? (
                                     <p>Try changing or clearing your filters.</p>
                                 ) : (
-                                    <p>You can create a job template here or using the CLI.</p>
+                                    <>
+                                        <p>You can create a job template here or using the CLI.</p>
+                                        <p>
+                                            <button type='button' className='argo-button argo-button--base' onClick={() => setSidePanel(true)}>
+                                                <i className='fa fa-plus' aria-hidden='true' /> Create job template
+                                            </button>
+                                        </p>
+                                    </>
                                 )}
                                 <p>
                                     <ExampleManifests />. {learnMore}.
@@ -284,7 +331,8 @@ export function WorkflowTemplateList({match, location, history}: RouteComponentP
                             </p>
                             <div className='argo-table-list' role='table' aria-label='Jobs'>
                                 <div className='row argo-table-list__head' role='row'>
-                                    <div className='columns small-6' role='columnheader'>
+                                    <div className='columns small-1' role='columnheader' aria-label='Expand recent runs' />
+                                    <div className='columns small-5' role='columnheader'>
                                         NAME AND TYPE
                                     </div>
                                     <div className='columns small-2' role='columnheader'>

@@ -18,6 +18,8 @@ import {services} from '../shared/services';
 import {useCollectEvent} from '../shared/use-collect-event';
 import {useEditableObject} from '../shared/use-editable-object';
 import {useQueryParams} from '../shared/use-query-params';
+import {JobRunStats} from '../workflow-templates/job-run-stats';
+import {TriggerPanel} from '../workflow-templates/trigger-panel';
 import {WorkflowTemplateEditor} from '../workflow-templates/workflow-template-editor';
 import {SubmitWorkflowPanel} from '../workflows/components/submit-workflow-panel';
 import {WorkflowDetailsList} from '../workflows/components/workflow-details-list/workflow-details-list';
@@ -31,7 +33,7 @@ export function ClusterWorkflowTemplateDetails({history, location, match}: Route
 
     const name = match.params.name;
     const [namespace, setNamespace] = useState<string>(queryParams.get('namespace') || undefined);
-    const [sidePanel, setSidePanel] = useState(queryParams.get('sidePanel') === 'true');
+    const [sidePanel, setSidePanel] = useState<string>(queryParams.get('sidePanel') || '');
     const [tab, setTab] = useState<string>(queryParams.get('tab'));
     const [workflows, setWorkflows] = useState<Workflow[]>([]);
     const [columns, setColumns] = useState<models.Column[]>([]);
@@ -41,7 +43,7 @@ export function ClusterWorkflowTemplateDetails({history, location, match}: Route
 
     useEffect(
         useQueryParams(history, p => {
-            setSidePanel(p.get('sidePanel') === 'true');
+            setSidePanel(p.get('sidePanel') || '');
             setTab(p.get('tab'));
             if (p.get('namespace')) setNamespace(p.get('namespace'));
         }),
@@ -96,7 +98,12 @@ export function ClusterWorkflowTemplateDetails({history, location, match}: Route
                             title: 'Submit',
                             iconClassName: 'fa fa-plus',
                             disabled: edited || !template,
-                            action: () => setSidePanel(true)
+                            action: () => setSidePanel('submit')
+                        },
+                        {
+                            title: 'Trigger',
+                            iconClassName: 'fa fa-bolt',
+                            action: () => setSidePanel('trigger')
                         },
                         {
                             title: 'Update',
@@ -148,22 +155,27 @@ export function ClusterWorkflowTemplateDetails({history, location, match}: Route
                         onError={setError}
                         onTabSelected={setTab}
                         selectedTabKey={tab}
+                        showChanges={true}
                     />
                 )}
             </>
             {template && (
-                <AccessibleSlidingPanel isShown={!!sidePanel} onClose={() => setSidePanel(false)} isMiddle={true} closeLabel='Close job panel'>
-                    <SubmitWorkflowPanel
-                        kind='ClusterWorkflowTemplate'
-                        namespace={namespace}
-                        onNamespaceChange={setNamespace}
-                        name={template.metadata.name}
-                        entrypoint={template.spec.entrypoint}
-                        templates={template.spec.templates || []}
-                        workflowParameters={template.spec.arguments?.parameters || []}
-                        templateAnnotations={template.metadata.annotations}
-                        history={history}
-                    />
+                <AccessibleSlidingPanel isShown={!!sidePanel} onClose={() => setSidePanel('')} isMiddle={true} closeLabel='Close job panel'>
+                    {sidePanel === 'trigger' ? (
+                        <TriggerPanel kind='ClusterWorkflowTemplate' namespace={namespace || ''} name={template.metadata.name} />
+                    ) : (
+                        <SubmitWorkflowPanel
+                            kind='ClusterWorkflowTemplate'
+                            namespace={namespace}
+                            onNamespaceChange={setNamespace}
+                            name={template.metadata.name}
+                            entrypoint={template.spec.entrypoint}
+                            templates={template.spec.templates || []}
+                            workflowParameters={template.spec.arguments?.parameters || []}
+                            templateAnnotations={template.metadata.annotations}
+                            history={history}
+                        />
+                    )}
                 </AccessibleSlidingPanel>
             )}
             <>
@@ -173,7 +185,11 @@ export function ClusterWorkflowTemplateDetails({history, location, match}: Route
                         <p> You can create new cluster workflow templates here or using the CLI. </p>
                     </ZeroState>
                 ) : (
-                    <WorkflowDetailsList workflows={workflows} columns={columns} />
+                    <>
+                        <h5>Recent runs</h5>
+                        <JobRunStats workflows={workflows} />
+                        <WorkflowDetailsList workflows={workflows} columns={columns} />
+                    </>
                 )}
             </>
         </Page>

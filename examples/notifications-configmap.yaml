@@ -1,0 +1,39 @@
+# Notification destinations for a namespace (docs/notifications.md).
+#
+# Apply into the namespace that runs workflows. Every key is a destination
+# name (referenced by the notifications.argoproj.io annotations on a Job),
+# except "defaults" (namespace defaults). Credential Secrets must carry
+# notifications.argoproj.io/allowed: "true" and live in this namespace.
+#
+# The hosts below must be listed in ARGO_SERVER_NOTIFICATION_ALLOW_HOSTS for
+# the deliveries to leave the server at all.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argo-notifications
+  namespace: argo
+data:
+  team-slack: |
+    {"type": "slack", "url": {"secret": {"name": "slack-hook", "key": "url"}}}
+  oncall-pagerduty: |
+    {"type": "pagerduty", "routingKey": {"secret": {"name": "pagerduty", "key": "routing-key"}}}
+  webhook: |
+    {"type": "webhook", "url": {"value": "https://example.com/argo-hook"}}
+  email: |
+    {"type": "smtp", "host": "smtp.example.com", "port": 465, "from": "argo@example.com", "to": ["team@example.com"], "username": "argo", "password": {"secret": {"name": "smtp-credentials", "key": "password"}}}
+  # Namespace defaults: runs whose Job did not opt in notify on failures.
+  defaults: |
+    {"destinations": ["team-slack"], "triggers": ["failed", "error"]}
+---
+# The labelled Secret a destination may read a credential from (the URL
+# above). Marking a Secret is the operator's explicit act.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: slack-hook
+  namespace: argo
+  labels:
+    notifications.argoproj.io/allowed: 'true'
+type: Opaque
+stringData:
+  url: https://hooks.slack.com/services/REPLACE/WITH/YOURS

@@ -8,6 +8,7 @@ import {Links} from '../shared/components/links';
 import {EventSource} from '../shared/models';
 import {services} from '../shared/services';
 import {FullHeightLogsViewer} from '../workflows/components/workflow-logs-viewer/full-height-logs-viewer';
+import {colorizeLogLine} from '../workflows/components/workflow-logs-viewer/log-colorizer';
 
 function identity<T>(value: T) {
     return () => value;
@@ -41,7 +42,9 @@ export function EventSourceLogsViewer({
                     Object.entries(e)
                         .map(([key, value]) => key + '=' + value)
                         .join(', ') + '\n'
-            )
+            ),
+            // style for the dark console; the visible text is unchanged
+            map(line => colorizeLogLine(line))
         );
         const subscription = source.subscribe(() => setLogLoaded(true), setError);
         setLogsObservable(source);

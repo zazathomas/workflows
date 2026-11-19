@@ -1,156 +1,152 @@
 @import 'node_modules/argo-ui/src/styles/config';
 
 .workflow-drawer {
-  font-size: 13px;
-  background-color: $argo-color-gray-1;
-  margin: 0 15px;
-  padding: 1.5em 15px;
-  border-radius: 0 0 3px 3px;
-  line-height: 30px;
-  width: 100%;
-  border-top: 1px solid $argo-color-gray-3;
+    width: 100%;
+    margin: 0 15px;
+    padding: 1.5em 15px;
+    border-top: 1px solid var(--border);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    background-color: var(--surface);
+    font-size: var(--text-sm);
+    line-height: 30px;
 
-  &__section {
-    padding: 1em 0;
-    box-sizing: border-box;
-    border-top: 2px solid $argo-color-gray-3;
+    &__section {
+        padding: 1em 0;
+        box-sizing: border-box;
+        border-top: 1px solid var(--border);
 
-    &:first-child {
-      padding-top: 0;
-      border-top: none;
+        &:first-child {
+            padding-top: 0;
+            border-top: none;
+        }
+
+        &:last-child {
+            padding-bottom: 0;
+        }
+
+        &:only-child {
+            padding: 0;
+        }
     }
 
-    &:last-child {
-      padding-bottom: 0;
+    &__message {
+        border-top: none;
+
+        &--label {
+            color: var(--text-muted);
+            margin-bottom: 1em;
+        }
+
+        &--content {
+            font-weight: 600;
+        }
     }
 
-    &:only-child {
-      padding: 0;
-    }
-  }
-
-  &__message {
-
-    &--label {
-      margin-bottom: 1em;
+    &__labels {
+        &--list {
+            margin-top: 0.5em;
+        }
     }
 
-    &--content {
-      font-weight: 600;
-    }
-
-  }
-
-  &__labels {
-    &--list {
-      margin-top: 0.5em;
-    }
-  }
-
-  &__message {
-    border-top: none;
-  }
-
-  .tag {
-    line-height: normal;
-    background-color: $argo-color-gray-3;
-    border-radius: 3px;
-    height: auto;
-    margin: 0.5em 0;
-    margin-right: 10px;
-    display: flex;
-    overflow: hidden;
-    cursor: pointer;
-
-    &:hover {
-      .key {
-        color: $argo-color-teal-5;
-      }
-      .value {
-        color: $argo-color-gray-3;
-      }
-    }
-
-    .key, .value {
-      padding: 0.5em 8px;
-    }
-
-    .key {
-      color: $argo-color-gray-6;
-    }
-
-    .value {
-      color: white;
-      background-color: $argo-color-teal-5;
-    }
-  }
-
-  &__description {
-    margin-top: 16px;
-    max-width: 75%;
-    white-space: pre-line;
-
-    &--content {
-      blockquote {
+    .tag {
+        display: flex;
+        height: auto;
+        margin: 0.5em 10px 0.5em 0;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background-color: var(--surface-sunken);
+        cursor: pointer;
         line-height: normal;
-        padding: 0.25rem 1rem 0 1.25rem;
-        margin: 0;
-      }
 
-      ul, ol {
-        line-height: normal;
-        margin: 0 0 -1.5rem 1.25rem;
-      }
-    }
-  }
+        &:hover {
+            .key {
+                color: var(--accent);
+            }
+        }
 
-  &__resourcesDuration {
-    &--value {
-      font-weight: 600;
-      margin-right: 0.5em;
-    }
-  }
+        .key,
+        .value {
+            padding: 0.5em 8px;
+        }
 
-  &__conditions {
-    margin-top: 0.5em;
+        .key {
+            color: var(--text-secondary);
+        }
 
-    .condition-panel__type {
-      font-weight: 600;
+        .value {
+            background-color: var(--accent-soft);
+            color: var(--accent-soft-text);
+        }
     }
 
-    .type {
-      font-weight: 600;
+    &__description {
+        max-width: 75%;
+        margin-top: var(--space-4);
+        white-space: pre-line;
+
+        &--content {
+            blockquote {
+                margin: 0;
+                padding: 0.25rem 1rem 0 1.25rem;
+                line-height: normal;
+            }
+
+            ul,
+            ol {
+                margin: 0 0 -1.5rem 1.25rem;
+                line-height: normal;
+            }
+        }
     }
-  }
+
+    &__resourcesDuration {
+        &--value {
+            margin-right: 0.5em;
+            font-weight: 600;
+        }
+    }
+
+    &__conditions {
+        margin-top: 0.5em;
+
+        .condition-panel__type {
+            font-weight: 600;
+        }
+
+        .type {
+            font-weight: 600;
+        }
+    }
 }
 
-.theme-dark .workflow-drawer {
-  background-color: #1f2937;
-  border-top-color: #334155;
-  color: #e5edf5;
+.workflow-drawer__steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
 
-  .workflow-drawer__section {
-    border-top-color: #334155;
-  }
+.workflow-drawer__step {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+}
 
-  .workflow-drawer__title {
-    color: #a8b8ca;
-  }
+.workflow-drawer__step-name {
+    overflow: hidden;
+    flex: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 
-  .tag {
-    background-color: #334155;
+.workflow-drawer__step-duration {
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+}
 
-    .key {
-      color: #cbd5e1;
-    }
-
-    .value {
-      color: #ecfeff;
-      background-color: #0f766e;
-    }
-
-    &:hover .key {
-      color: #9fe8ef;
-    }
-  }
+.workflow-drawer__steps-more {
+    padding-left: var(--space-1);
+    color: var(--text-muted);
+    font-size: var(--text-xs);
 }

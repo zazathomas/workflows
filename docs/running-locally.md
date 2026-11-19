@@ -1,68 +1,66 @@
 # Running locally
 
 workflows builds Argo Server with an embedded UI.
-Live workflow execution requires an existing Argo Workflows installation with a controller and CRDs.
-The fork does not build the controller or executor.
+Live workflow execution needs an existing Argo Workflows installation with a controller and CRDs; this fork does not build either.
+Run every build, test, and dev server in a container, using the images pinned in `Dockerfile` (see the repository `AGENTS.md`), and keep caches in named volumes.
 
 ## Build the server
 
-Install Go, Node.js and Yarn, then run:
+The Go build embeds `ui/dist/app`, so build the UI bundle first:
 
 ```bash
-make cli
-./dist/argo server --help
+# UI bundle (node pin from Dockerfile's argo-ui stage)
+docker run --rm -v "$PWD":/src -v workflows-ui-nm:/src/ui/node_modules -w /src node:24-alpine3.23 \
+  sh -c 'apk add git && yarn --cwd ui install --frozen-lockfile && yarn --cwd ui build'
+
+# server binary at dist/argo (Go pin from Dockerfile's builder stage)
+docker run --rm -v "$PWD":/src -v workflows-go-mod:/go/pkg/mod -w /src golang:1.27.3-alpine3.23 \
+  sh -c 'apk add git make ca-certificates bash && make dist/argo'
 ```
 
-The binary embeds the production UI.
-The upstream code generation pipeline is not included in this minimal fork.
+`./dist/argo server` then serves the API and UI on port 2746.
+`make cli` is the same thing for a host with Go, Node, and Yarn already installed.
+The upstream code generation pipeline is not part of this fork.
 
 ## Develop the UI
 
-Forward an existing Argo Server service to localhost, substituting its namespace and service name:
+Forward an existing argo-server to localhost, substituting its namespace and service name:
 
 ```bash
 kubectl -n <namespace> port-forward service/<argo-server-service> 2746:2746
 ```
 
-In another terminal, start the UI:
+Then start the dev server (`:8080`, proxying API and artifact requests to `:2746`):
 
 ```bash
-yarn --cwd ui install
-yarn --cwd ui start
+docker run --rm -v "$PWD":/src -v workflows-ui-nm:/src/ui/node_modules -w /src/ui -p 8080:8080 node:24-alpine3.23 \
+  sh -c 'apk add git && yarn start --host 0.0.0.0'
 ```
 
-Open <http://localhost:8080>.
-The development server proxies API and artifact requests to port 2746.
-The existing server's authentication configuration still applies.
-Do not share authorization cookies or tokens.
-
-For a UI-only mock backend, see the [repository README](../README.md).
+The existing installation's authentication still applies; do not share authorization cookies or tokens.
+For a UI-only mock backend, use [`hack/mock-argo-server.py`](../hack/README.md) as described in the [repository README](../README.md).
 
 ## Run tests
 
-```bash
-make test-hack
-make compatibility  # also builds the embedded UI on a fresh clone
-KUBECONFIG=/dev/null GOFLAGS='-mod=mod -tags=kubernetes_protomessage_one_more_release' go test ./server/...
-yarn --cwd ui test --runInBand
-yarn --cwd ui playwright install chromium
-yarn --cwd ui playwright test -c playwright.mock.config.ts
-```
+| Target | What it runs | Needs |
+| --- | --- | --- |
+| `make test-ui` | UI unit tests (Jest) | node image |
+| `make test-ui-e2e` | Mock-backed browser tests | Playwright image (see `ui/AGENTS.md`) |
+| `make lint` | UI ESLint `--fix` and TypeScript checks | node image |
+| `make test-hack` | Compatibility tooling unit tests | python3 |
+| `make upstream-versions` | Fetches every registered upstream tag (once) | python3, git |
+| `make upstream-contract` | API contract for every registered release | python3, fetched tags |
+| `make compatibility` | Contract check plus server, CLI, and runner Go tests | python3, Go, UI bundle |
+| `make test-api` | Live upstream API e2e suite | Go, disposable installation |
 
-Start the UI development server before the mock-backed Playwright suite.
-The suite intercepts API requests; it does not create cluster resources.
-See `ui/e2e/README.md` in the repository for browser configuration and live-test precautions.
+`make test-ui-e2e` reuses a dev server already running on `:8080` and otherwise starts one; set `ARGO_UI_BASE_URL` to point it elsewhere, for example the container flow in `ui/AGENTS.md`.
+The suite intercepts API requests and creates no cluster resources; see [`ui/e2e/README.md`](../ui/e2e/README.md).
 
-The conformance scripts (`hack/conformance.sh`, `hack/conformance-run-action.sh`, and `hack/conformance-parameter.sh`) require an explicitly prepared, disposable installation of a release listed in [the compatibility matrix](compatibility.md).
-Never run them against a shared cluster.
-To create that installation yourself, run `bash hack/conformance-version.sh v4.1.3 workflows:local` with a locally built image; it manages its own kind cluster.
-To check the API contract for every listed release, run `make upstream-versions` once and then `make upstream-contract`.
-The retained Go API E2E suite (`make test-api`) also requires an explicitly prepared, disposable upstream Argo installation.
-It creates and deletes resources in the `argo` namespace and requires the fixtures and persistence configuration expected by the suite.
-Do not run it against a shared or production cluster.
+The conformance and API suite scripts (`hack/conformance*.sh`, `make test-api`) create and delete real resources and need an explicitly prepared, disposable installation of a [supported release](compatibility.md).
+They never target a cluster you did not create, and must not run against a shared or production cluster.
+To make one yourself, run `bash hack/conformance-version.sh v4.1.3 workflows:local` after building the image; it manages its own kind cluster.
 
 ## Deploy the server
 
-Build the production image with `docker build --target server -t workflows:local .`.
-Use [deployment](deployment.md) to install a signed release digest alongside an upstream controller and CRDs from the same listed release.
-Review authentication, TLS and RBAC before deploying.
+Build the production image with `docker build --target server -t workflows:local .`, then follow [deployment](deployment.md) to install a signed release digest alongside an upstream controller and CRDs from the same release.
+Review authentication, TLS, and RBAC before deploying.

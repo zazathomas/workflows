@@ -95,6 +95,75 @@ describe('SubmitWorkflowPanel', () => {
         submit.mockRestore();
     });
 
+    it('renders the survey form and passes the answers and run message as parameters', async () => {
+        const history = createMemoryHistory();
+        const context = {navigation: {goto: jest.fn()}, popup: {}, notifications: {}, history} as any;
+        const submitted = {metadata: {namespace: 'argo', name: 'example-123', uid: 'uid-123'}} as any;
+        const submit = jest.spyOn(services.workflows, 'submit').mockResolvedValue(submitted);
+        const {container, getByLabelText, getByRole} = render(
+            <Context.Provider value={context}>
+                <SubmitWorkflowPanel
+                    kind='WorkflowTemplate'
+                    namespace='argo'
+                    name='example'
+                    entrypoint='main'
+                    templates={[]}
+                    workflowParameters={[{name: 'environment', value: 'dev'}]}
+                    templateAnnotations={{
+                        'workflows.argoproj.io/survey': JSON.stringify([
+                            {name: 'environment', type: 'select', required: true, options: ['dev', 'prod']},
+                            {name: 'replicas', type: 'number', default: '3'}
+                        ])
+                    }}
+                    history={history}
+                />
+            </Context.Provider>
+        );
+
+        // the survey question is shown with its declared type, and the covered
+        // template parameter is no longer rendered as a raw parameter input
+        expect(getByRole('combobox', {name: /environment/i})).toBeInTheDocument();
+        expect((container.querySelector('#parameter-environment-0') as HTMLElement) || null).toBeNull();
+
+        // the answers replace the covered template parameter and use declared defaults
+        fireEvent.change(getByRole('combobox', {name: /environment/i}), {target: {value: 'prod'}});
+        fireEvent.change(getByLabelText(/replicas/i), {target: {value: '5'}});
+        fireEvent.change(getByLabelText('Message (optional)'), {target: {value: 'nightly deploy, tickets 123'}});
+        fireEvent.click(getByRole('button', {name: 'Run job'}));
+
+        await waitFor(() => expect(submit).toHaveBeenCalled());
+        const options = submit.mock.calls[0][3];
+        // the survey answers override the template parameter defaults
+        expect(options.parameters).toEqual(expect.arrayContaining(['environment=prod', 'replicas=5']));
+        expect(options.parameters).not.toContain('environment=dev');
+        // commas in the message are sanitized so the annotations option stays a k=v list
+        expect(options.annotations).toBe('workflows.argoproj.io/run-message=nightly deploy tickets 123');
+        submit.mockRestore();
+    });
+
+    it('disables the run button while a required survey answer is missing', () => {
+        const history = createMemoryHistory();
+        const context = {navigation: {goto: jest.fn()}, popup: {}, notifications: {}, history} as any;
+        const {getByRole, getByText} = render(
+            <Context.Provider value={context}>
+                <SubmitWorkflowPanel
+                    kind='WorkflowTemplate'
+                    namespace='argo'
+                    name='example'
+                    entrypoint='main'
+                    templates={[]}
+                    workflowParameters={[]}
+                    templateAnnotations={{
+                        'workflows.argoproj.io/survey': JSON.stringify([{name: 'environment', type: 'select', required: true, options: ['dev', 'prod']}])
+                    }}
+                    history={history}
+                />
+            </Context.Provider>
+        );
+        expect(getByRole('button', {name: 'Run job'})).toBeDisabled();
+        expect(getByText('environment is required')).toBeInTheDocument();
+    });
+
     it('hides the entrypoint until advanced configuration is enabled', () => {
         const history = createMemoryHistory();
         const context = {

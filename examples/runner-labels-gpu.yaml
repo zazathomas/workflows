@@ -1,0 +1,27 @@
+# Runner capability labels: a job that runs only on labelled runners.
+#
+# Enrol a runner with `argo-runner enrol --labels gpu …` (or
+# ARGO_RUNNER_LABELS=gpu); this template's runsOn requirement means the job is
+# handed only to runners carrying the "gpu" label.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: runner-labels-gpu
+  namespace: builds
+  annotations:
+    workflows.argoproj.io/description: |
+      A broker job requiring a gpu-labelled runner.
+spec:
+  entrypoint: main
+  serviceAccountName: runner-workflow
+  templates:
+    - name: main
+      plugin:
+        runner:
+          node: "{{node.name}}"
+          pool: build
+          image: docker.io/library/busybox@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+          command: [sh, -c]
+          args: ['echo "running on a gpu runner"; sleep 30']
+          runsOn: [gpu]
+          timeout: 5m

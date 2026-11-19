@@ -18,6 +18,52 @@ interface Props<T> {
     onChange?: (value: string) => void;
 }
 
+// Object kinds whose spec carries a templates list where the insert-step
+// palette applies.
+const TEMPLATE_KINDS = new Set(['Workflow', 'WorkflowTemplate', 'ClusterWorkflowTemplate', 'CronWorkflow']);
+
+// YAML snippets inserted at the cursor (indented as entries of the
+// spec.templates list).
+const STEP_SNIPPETS: {name: string; title: string; snippet: string}[] = [
+    {
+        name: 'container',
+        title: 'Container step',
+        snippet: `  - name: step-name
+    container:
+      image: alpine:3.19
+      command: [sh, -c]
+      args: ['echo hello from a container step']
+`
+    },
+    {
+        name: 'suspend',
+        title: 'Suspend / approval step',
+        snippet: `  - name: approval-step
+    suspend:
+      duration: '5m' # remove for a manual approval (resume from the UI)
+`
+    },
+    {
+        name: 'steps',
+        title: 'Steps group',
+        snippet: `  - name: main-steps
+    steps:
+      - - name: first
+          template: step-name
+`
+    },
+    {
+        name: 'dag',
+        title: 'DAG template',
+        snippet: `  - name: main-dag
+    dag:
+      tasks:
+        - name: a
+          template: step-name
+`
+    }
+];
+
 export function ObjectEditor<T>({type, value, text, lang, onChange, onLangChange}: Props<T>) {
     const [error, setError] = useState<Error>();
     const editor = useRef<MonacoEditor>(null);
@@ -67,6 +113,20 @@ export function ObjectEditor<T>({type, value, text, lang, onChange, onLangChange
     // some pixels above and below for buttons, plus a bit of a buffer/padding
     const height = Math.max(600, window.innerHeight * 0.9 - 250);
 
+    function insertSnippet(snippet: string) {
+        const monaco = editor.current?.editor;
+        if (!monaco || !onChange) {
+            return;
+        }
+        const position = monaco.getPosition();
+        monaco.executeEdits('insert-step-palette', [
+            {range: {startLineNumber: position.lineNumber, startColumn: position.column, endLineNumber: position.lineNumber, endColumn: position.column}, text: snippet}
+        ]);
+        monaco.focus();
+    }
+
+    const stepPalette = !!(type && TEMPLATE_KINDS.has(type) && lang === 'yaml' && onChange !== null);
+
     return (
         <>
             <div style={{paddingBottom: '1em'}}>
@@ -96,6 +156,16 @@ export function ObjectEditor<T>({type, value, text, lang, onChange, onLangChange
                         {x}
                     </Button>
                 ))}
+                {stepPalette && (
+                    <span className='object-editor__step-palette' title='Insert a template entry at the cursor (place it inside the spec.templates list)'>
+                        <i className='fa fa-plus' aria-hidden='true' /> Insert:
+                        {STEP_SNIPPETS.map(step => (
+                            <Button key={step.name} outline={true} onClick={() => insertSnippet(step.snippet)} icon='code'>
+                                {step.title}
+                            </Button>
+                        ))}
+                    </span>
+                )}
             </div>
             <div>
                 <SuspenseMonacoEditor

@@ -42,6 +42,16 @@ export function getResolvedTemplates(workflow: models.Workflow, node: models.Nod
     return resolvedTemplate;
 }
 
+// isRunnerNode reports whether a node is a remote runner job: a Plugin node
+// whose resolved template is a `runner` plugin (docs/runners.md).
+export function isRunnerNode(workflow: models.Workflow, node: models.NodeStatus): boolean {
+    if (!node || node.type !== 'Plugin') {
+        return false;
+    }
+    const template = getResolvedTemplates(workflow, node);
+    return !!template?.plugin && !!template.plugin.runner;
+}
+
 export function getMainContainerNames(workflow: models.Workflow, node?: models.NodeStatus): string[] {
     if (!node) {
         return ['main'];

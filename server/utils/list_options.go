@@ -1,10 +1,12 @@
 package utils
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -13,15 +15,31 @@ import (
 )
 
 type ListOptions struct {
-	Namespace, Name              string
-	NamePrefix, NameFilter       string
-	NamespaceFilter              string
-	MinStartedAt, MaxStartedAt   time.Time
-	CreatedAfter, FinishedBefore time.Time
-	LabelRequirements            labels.Requirements
-	Limit, Offset                int
-	ShowRemainingItemCount       bool
-	StartedAtAscending           bool
+	Namespace, Name                  string
+	NamePrefix, NameFilter           string
+	NameTitleContains, LabelContains string
+	NamespaceFilter                  string
+	MinStartedAt, MaxStartedAt       time.Time
+	CreatedAfter, FinishedBefore     time.Time
+	LabelRequirements                labels.Requirements
+	Limit, Offset                    int
+	ShowRemainingItemCount           bool
+	StartedAtAscending               bool
+}
+
+func (l ListOptions) HasSubstringSearch() bool {
+	return l.NameTitleContains != "" || l.LabelContains != ""
+}
+
+func decodeSearchTerm(encoded string) (string, error) {
+	if len(encoded) > 512 {
+		return "", status.Error(codes.InvalidArgument, "search term exceeds 256 bytes")
+	}
+	raw, err := hex.DecodeString(encoded)
+	if err != nil || !utf8.Valid(raw) || strings.IndexByte(string(raw), 0) >= 0 {
+		return "", status.Error(codes.InvalidArgument, "invalid substring search term")
+	}
+	return strings.TrimSpace(string(raw)), nil
 }
 
 func (l ListOptions) WithLimit(limit int) ListOptions {
@@ -94,6 +112,7 @@ func BuildListOptions(options metav1.ListOptions, ns, namePrefix, nameFilter, cr
 		}
 	}
 	showRemainingItemCount := false
+	var nameTitleContains, labelContains string
 	for selector := range strings.SplitSeq(options.FieldSelector, ",") {
 		if len(selector) == 0 {
 			continue
@@ -144,6 +163,16 @@ func BuildListOptions(options metav1.ListOptions, ns, namePrefix, nameFilter, cr
 				// no need to use sutils here
 				return ListOptions{}, ToStatusError(err, codes.Internal)
 			}
+		} else if field, value, ok := strings.Cut(selector, "="); ok && (field == "ext.nameTitleContains" || field == "ext.labelContains") {
+			term, err := decodeSearchTerm(value)
+			if err != nil {
+				return ListOptions{}, err
+			}
+			if field == "ext.nameTitleContains" {
+				nameTitleContains = term
+			} else {
+				labelContains = term
+			}
 		} else if strings.HasPrefix(selector, "ext.showRemainingItemCount") {
 			showRemainingItemCount, err = strconv.ParseBool(strings.TrimPrefix(selector, "ext.showRemainingItemCount="))
 			if err != nil {
@@ -163,6 +192,8 @@ func BuildListOptions(options metav1.ListOptions, ns, namePrefix, nameFilter, cr
 		Name:                   name,
 		NamePrefix:             namePrefix,
 		NameFilter:             nameFilter,
+		NameTitleContains:      nameTitleContains,
+		LabelContains:          labelContains,
 		NamespaceFilter:        namespaceFilter,
 		CreatedAfter:           createdAfterTime,
 		FinishedBefore:         finishedBeforeTime,

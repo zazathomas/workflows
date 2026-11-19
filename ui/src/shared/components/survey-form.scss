@@ -1,0 +1,35 @@
+.survey-form__question {
+    margin-bottom: 16px;
+}
+
+.survey-form__label {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.survey-form__required {
+    color: var(--status-failed-text);
+}
+
+.survey-form__help {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-muted);
+}
+
+.survey-form__textarea {
+    min-height: 80px;
+}
+
+.survey-form__options {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.survey-form__error {
+    display: block;
+    margin-top: 4px;
+    color: var(--status-failed-text);
+}

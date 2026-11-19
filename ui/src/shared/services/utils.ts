@@ -6,6 +6,8 @@ export function queryParams(filter: {
     name?: string;
     namePrefix?: string;
     namePattern?: string;
+    nameTitleContains?: string;
+    labelContains?: string;
     nameFilter?: NameFilterKeys;
     phases?: Array<string>;
     labels?: Array<string>;
@@ -16,7 +18,11 @@ export function queryParams(filter: {
     archiveFilter?: 'all' | 'live' | 'archived';
 }) {
     const queryParams: string[] = [];
-    const fieldSelector = fieldSelectorParams(filter.namespace, filter.name, filter.pagination?.includeRemainingItemCount);
+    const fieldSelector = [
+        fieldSelectorParams(filter.namespace, filter.name, filter.pagination?.includeRemainingItemCount),
+        substringSelector('nameTitleContains', filter.nameTitleContains),
+        substringSelector('labelContains', filter.labelContains)
+    ].filter(Boolean).join(',');
     if (fieldSelector.length > 0) {
         queryParams.push(`listOptions.fieldSelector=${fieldSelector}`);
     }
@@ -51,6 +57,13 @@ export function queryParams(filter: {
         queryParams.push(`finishedBefore=${filter.finishedBefore.toISOString()}`);
     }
     return queryParams;
+}
+
+function substringSelector(field: string, value?: string) {
+    const term = value?.trim();
+    if (!term) return '';
+    const encoded = Array.from(new TextEncoder().encode(term), byte => byte.toString(16).padStart(2, '0')).join('');
+    return `ext.${field}=${encoded}`;
 }
 
 function fieldSelectorParams(namespace?: string, name?: string, includeRemainingItemCount?: boolean) {

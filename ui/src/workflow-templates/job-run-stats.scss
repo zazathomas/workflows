@@ -1,0 +1,27 @@
+.job-run-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0 0 16px;
+}
+
+.job-run-stats__tile {
+    display: inline-flex;
+    flex-direction: column;
+    min-width: 96px;
+    padding: 10px 14px;
+    border: 1px solid rgba(109, 127, 139, 0.25);
+    border-radius: var(--radius-md);
+    background: rgba(109, 127, 139, 0.05);
+}
+
+.job-run-stats__value {
+    font-size: 1.4em;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.job-run-stats__label {
+    color: var(--text-muted);
+    font-size: 0.82em;
+}

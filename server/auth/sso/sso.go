@@ -378,7 +378,7 @@ func (s *sso) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		},
 		Groups:                  groups,
 		Email:                   c.Email,
-		EmailVerified:           c.EmailVerified,
+		SessionEmailVerified:    c.EmailVerified,
 		Name:                    c.Name,
 		ServiceAccountName:      c.ServiceAccountName,
 		PreferredUsername:       c.PreferredUsername,
@@ -437,6 +437,8 @@ func (s *sso) Authorize(authorization string) (*types.Claims, error) {
 	if err := c.Validate(jwt.Expected{Issuer: issuer}); err != nil {
 		return nil, fmt.Errorf("failed to validate claims: %w", err)
 	}
+	c.OIDCIssuer = s.issuer
+	c.EmailVerified = c.SessionEmailVerified
 	return c, nil
 }
 

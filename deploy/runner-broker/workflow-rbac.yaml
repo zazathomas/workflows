@@ -1,0 +1,46 @@
+# Add to the upstream workflow-controller RBAC. Do not grant these verbs to the remote hosts.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: runner-workflow
+  namespace: builds
+---
+# Stock Argo v4.1 agents mount this named token Secret.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: runner-workflow.service-account-token
+  namespace: builds
+  annotations:
+    kubernetes.io/service-account.name: runner-workflow
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: runner-workflow
+  namespace: builds
+rules:
+  - apiGroups: [argoproj.io]
+    resources: [workflowtaskresults]
+    verbs: [create, patch]
+  - apiGroups: [argoproj.io]
+    resources: [workflowtasksets]
+    verbs: [get, list, watch]
+  - apiGroups: [argoproj.io]
+    resources: [workflowtasksets/status]
+    verbs: [patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: runner-workflow
+  namespace: builds
+subjects:
+  - kind: ServiceAccount
+    name: runner-workflow
+    namespace: builds
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: runner-workflow

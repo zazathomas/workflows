@@ -14,6 +14,8 @@ type Claims struct {
 	Groups                  []string       `json:"groups,omitempty"`
 	Email                   string         `json:"email,omitempty"`
 	EmailVerified           bool           `json:"-"`
+	SessionEmailVerified    bool           `json:"argo_email_verified,omitempty"`
+	OIDCIssuer              string         `json:"-"`
 	Name                    string         `json:"name,omitempty"`
 	ServiceAccountName      string         `json:"service_account_name,omitempty"`
 	ServiceAccountNamespace string         `json:"service_account_namespace,omitempty"`

@@ -1,0 +1,28 @@
+# Containerised runner for docker compose (docs/runners.md).
+#
+#   docker compose -f deploy/runners/docker-compose.yml up -d
+#
+# The default flavour is rootless DinD. It needs a runtime that permits
+# RootlessKit's mounts and user namespaces. For Docker Desktop and Linux
+# Docker Engine, layer docker-compose.privileged.yml only on dedicated
+# or disposable hosts. See docs/runners.md for the security trade-offs.
+
+services:
+  runner:
+    image: ghcr.io/zazathomas/workflows-runner:latest # replace with a digest from the release
+    # Register once, then restart without the join token: enrolment persists
+    # in the runner-state volume.
+    command: [run, --policy, /etc/argo-runner/policy.json]
+    environment:
+      - DIND_MODE=rootless
+      # Start with: ARGO_RUNNER_JOIN_TOKEN=ajt_… docker compose up -d
+      - ARGO_RUNNER_JOIN_TOKEN=${ARGO_RUNNER_JOIN_TOKEN:-}
+      - ARGO_RUNNER_SERVER=${ARGO_RUNNER_SERVER:-https://runner-broker.example.com}
+    volumes:
+      - runner-state:/home/rootless/argo-runner
+      # Operator-owned policy: allowed registries, resource ceilings, egress.
+      - ./policy.json:/etc/argo-runner/policy.json:ro
+    restart: unless-stopped
+
+volumes:
+  runner-state:

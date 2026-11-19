@@ -20,18 +20,23 @@ func CanIArgo(ctx context.Context, kubeclientset kubernetes.Interface, verb, res
 			"name":      name,
 		}).
 		Debug(ctx, "CanI")
-	return CanI(
+	return canI(
 		ctx,
 		kubeclientset,
 		[]string{verb},
 		"argoproj.io",
 		namespace,
 		resource,
+		name,
 	)
 }
 
 // CanI attempts to determine if a verb is actionable by a certain resource
 func CanI(ctx context.Context, kubeclientset kubernetes.Interface, verbs []string, group, namespace, resource string) (bool, error) {
+	return canI(ctx, kubeclientset, verbs, group, namespace, resource, "")
+}
+
+func canI(ctx context.Context, kubeclientset kubernetes.Interface, verbs []string, group, namespace, resource, name string) (bool, error) {
 	if len(verbs) == 0 {
 		return true, nil
 	}
@@ -43,6 +48,7 @@ func CanI(ctx context.Context, kubeclientset kubernetes.Interface, verbs []strin
 					Verb:      verb,
 					Group:     group,
 					Resource:  resource,
+					Name:      name,
 				},
 			},
 		}, metav1.CreateOptions{})

@@ -19,7 +19,7 @@
     &__view,
     &__hide {
         flex-shrink: 0;
-        color: #006f8a;
+        color: var(--accent);
         text-decoration: underline;
     }
 
@@ -37,12 +37,5 @@
         font: inherit;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
-    }
-}
-
-.modern-theme-dark .workflow-parameter-value {
-    &__view,
-    &__hide {
-        color: #9fe8ef;
     }
 }

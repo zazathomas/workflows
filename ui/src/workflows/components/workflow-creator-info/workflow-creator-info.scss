@@ -6,12 +6,12 @@
   align-items: center;
   height: 100%;
   $gutter: 0.5em;
-  border-radius: 0 0 3px 3px;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 
   .tag {
     line-height: normal;
     background-color: $argo-color-gray-3;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     height: auto;
     margin: $gutter 0;
     margin-right: 10px;

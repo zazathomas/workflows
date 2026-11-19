@@ -13,6 +13,8 @@ type resultCapturingWriter struct {
 	size                int
 }
 
+func (w *resultCapturingWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 func (r *resultCapturingWriter) Write(b []byte) (int, error) {
 	size, err := r.ResponseWriter.Write(b)
 	r.size += size

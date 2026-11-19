@@ -16,47 +16,31 @@
 
 .workflows-row__phase {
     display: block;
-    color: #526879;
-    font-size: 12px;
+    color: var(--text-muted);
+    font-size: var(--text-xs);
     line-height: 1.2;
 }
 
-.theme-dark .workflows-row__phase {
-    color: #c3d1df;
-}
-
 .workflows-row__action {
-    padding: 5px 7px;
+    padding: 5px 8px;
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--radius-sm);
     background: transparent;
-    color: #355466;
+    color: var(--text-secondary);
     cursor: pointer;
     font: inherit;
-    text-transform: uppercase;
+    font-size: var(--text-xs);
+    font-weight: 600;
 
     &:hover,
     &:focus-visible {
-        background: #e7f4f7;
-        color: #006f8a;
-        outline: 2px solid #006f8a;
-        outline-offset: 1px;
+        background: var(--accent-soft);
+        color: var(--accent-soft-text);
     }
 }
 
 .workflows-row__mobile-card {
     display: none;
-}
-
-.theme-dark .workflows-row__action {
-    color: #9fe8ef;
-
-    &:hover,
-    &:focus-visible {
-        background: #273548;
-        color: #cffafe;
-        outline-color: #5eead4;
-    }
 }
 
 @media (max-width: 640px) {
@@ -66,10 +50,11 @@
 
     .workflows-row__mobile-card {
         display: block;
-        margin: 0;
-        padding: 16px;
-        border-bottom: 1px solid #dce6ec;
-        background: #ffffff;
+        margin: 0 0 var(--space-2);
+        padding: var(--space-4);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--surface);
     }
 
     .workflows-row__mobile-header,
@@ -81,14 +66,14 @@
 
     .workflows-row__mobile-header {
         justify-content: space-between;
-        gap: 12px;
+        gap: var(--space-3);
     }
 
     .workflows-row__mobile-title {
         min-width: 0;
         gap: 9px;
-        font-size: 15px;
-        font-weight: 700;
+        font-size: var(--text-lg);
+        font-weight: 600;
 
         a {
             overflow: hidden;
@@ -99,24 +84,24 @@
 
     .workflows-row__mobile-message {
         margin: 10px 0 14px;
-        color: #52606d;
-        font-size: 13px;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
     }
 
     .workflows-row__mobile-metadata {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px 18px;
-        margin: 0 0 16px;
+        gap: var(--space-3) 18px;
+        margin: 0 0 var(--space-4);
 
         div {
             min-width: 0;
         }
 
         dt {
-            color: #607086;
-            font-size: 11px;
-            font-weight: 700;
+            color: var(--text-muted);
+            font-size: var(--text-2xs);
+            font-weight: 600;
             letter-spacing: 0.04em;
             text-transform: uppercase;
         }
@@ -124,8 +109,8 @@
         dd {
             margin: 3px 0 0;
             overflow: hidden;
-            color: #263442;
-            font-size: 13px;
+            color: var(--text-primary);
+            font-size: var(--text-sm);
             text-overflow: ellipsis;
             white-space: nowrap;
         }
@@ -133,24 +118,30 @@
 
     .workflows-row__mobile-actions {
         flex-wrap: wrap;
-        gap: 8px;
+        gap: var(--space-2);
 
         .argo-button {
             margin: 0;
         }
     }
+}
 
-    .theme-dark & .workflows-row__mobile-card {
-        border-bottom-color: #334155;
-        background: #1f2937;
-    }
+.workflows-row__quick-actions {
+    display: inline-flex;
+    gap: 6px;
+}
 
-    .theme-dark & .workflows-row__mobile-message,
-    .theme-dark & .workflows-row__mobile-metadata dt {
-        color: #a8b8ca;
-    }
+.workflows-row__quick-action {
+    padding: 2px 4px;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: var(--text-md);
+    line-height: 1;
 
-    .theme-dark & .workflows-row__mobile-metadata dd {
-        color: #e5edf5;
+    &:hover,
+    &:focus-visible {
+        color: var(--accent);
     }
 }

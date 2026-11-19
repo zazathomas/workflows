@@ -8,8 +8,11 @@ import {useEffect, useState} from 'react';
 import {Redirect, Route, Router, Switch} from 'react-router';
 
 import apiDocs from './api-docs';
+import approvals from './approvals';
 import clusterWorkflowTemplates from './cluster-workflow-templates';
 import cronWorkflows from './cron-workflows';
+import dashboard from './dashboard';
+import environment from './environment';
 import eventflow from './event-flow';
 import eventSources from './event-sources';
 import help from './help';
@@ -20,12 +23,17 @@ import reports from './reports';
 import {RunActionProvider} from './run-actions/run-action-provider';
 import sensors from './sensors';
 import {uiUrl} from './shared/base';
+
+import './keyboard-shortcuts.scss';
+
 import {ChatButton} from './shared/components/chat-button';
 import ErrorBoundary from './shared/components/error-boundary';
 import {ModernLayout} from './shared/components/modern-layout';
 import {Version} from './shared/models';
 import * as nsUtils from './shared/namespaces';
 import {services} from './shared/services';
+import {useApprovalsCount} from './shared/use-approvals-count';
+import {SHORTCUTS, useKeyboardNavigation} from './shared/use-keyboard-navigation';
 import userinfo from './userinfo';
 import {Widgets} from './widgets/widgets';
 import workflowEventBindings from './workflow-event-bindings';
@@ -47,6 +55,10 @@ const userInfoUrl = uiUrl('userinfo');
 const loginUrl = uiUrl('login');
 const timelineUrl = uiUrl('timeline');
 const reportsUrl = uiUrl('reports');
+const approvalsUrl = uiUrl('approvals');
+const dashboardUrl = uiUrl('dashboard');
+const environmentUrl = uiUrl('environment');
+const rootUrl = uiUrl('');
 
 export function AppRouter({popupManager, history, notificationsManager}: {popupManager: PopupManager; history: H.History; notificationsManager: NotificationsManager}) {
     const [popupProps, setPopupProps] = useState<PopupProps>();
@@ -63,6 +75,14 @@ export function AppRouter({popupManager, history, notificationsManager}: {popupM
         });
     };
     nsUtils.setOnNamespaceChange(setNamespace);
+    // Attention dot on the Runs nav item: suspended steps of running runs
+    // (polled) mean a pending approval request is waiting on a human.
+    const approvalsCount = useApprovalsCount(namespace);
+    const [showShortcuts, setShowShortcuts] = useState(false);
+    useKeyboardNavigation(
+        () => setShowShortcuts(value => !value),
+        path => history.push(path)
+    );
     useEffect(() => {
         const sub = popupManager.popupProps.subscribe(setPopupProps);
         return () => sub.unsubscribe();
@@ -97,6 +117,28 @@ export function AppRouter({popupManager, history, notificationsManager}: {popupM
     return (
         <RunActionProvider key={actionSubject || 'loading'} subject={actionSubject} history={history}>
             {popupProps && <Popup {...popupProps} />}
+            {showShortcuts && (
+                <div className='keyboard-shortcuts' role='dialog' aria-label='Keyboard shortcuts' onClick={() => setShowShortcuts(false)}>
+                    <div className='keyboard-shortcuts__sheet' onClick={event => event.stopPropagation()}>
+                        <h2>Keyboard shortcuts</h2>
+                        <table>
+                            <tbody>
+                                {SHORTCUTS.map(shortcut => (
+                                    <tr key={shortcut.key}>
+                                        <td>
+                                            <kbd>{shortcut.key}</kbd>
+                                        </td>
+                                        <td>{shortcut.description}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        <button type='button' className='argo-button argo-button--base-o' onClick={() => setShowShortcuts(false)}>
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
             <Router history={history}>
                 <Switch>
                     <Route exact={true} strict={true} path={loginUrl} component={login.component} />
@@ -106,6 +148,12 @@ export function AppRouter({popupManager, history, notificationsManager}: {popupM
                         navBarStyle={{backgroundColor: navBarBackgroundColor}}
                         userName={userName}
                         navItems={[
+                            {
+                                title: 'Overview',
+                                path: dashboardUrl + namespaceSuffix,
+                                iconClassName: 'fa fa-tachometer-alt',
+                                group: 'Self service'
+                            },
                             {
                                 title: 'Jobs',
                                 path: workflowTemplatesUrl + namespaceSuffix,
@@ -117,7 +165,8 @@ export function AppRouter({popupManager, history, notificationsManager}: {popupM
                                 title: 'Runs',
                                 path: workflowsUrl + namespaceSuffix,
                                 iconClassName: 'fa fa-stream',
-                                group: 'Self service'
+                                group: 'Self service',
+                                attention: (approvalsCount ?? 0) > 0
                             },
                             {
                                 title: 'Schedules',
@@ -162,6 +211,12 @@ export function AppRouter({popupManager, history, notificationsManager}: {popupM
                                 group: 'Administration'
                             },
                             {
+                                title: 'Environment',
+                                path: environmentUrl + namespaceSuffix,
+                                iconClassName: 'fa fa-cube',
+                                group: 'Administration'
+                            },
+                            {
                                 title: 'API Docs',
                                 path: apiDocsUrl,
                                 iconClassName: 'fa fa-code',
@@ -184,6 +239,9 @@ export function AppRouter({popupManager, history, notificationsManager}: {popupM
                         <Notifications notifications={notificationsManager.notifications} />
                         <ErrorBoundary>
                             <Switch>
+                                <Route exact={true} strict={true} path={rootUrl}>
+                                    <Redirect to={managedNamespace || !namespace ? dashboardUrl : dashboardUrl + '/' + namespace} />
+                                </Route>
                                 <Route exact={true} strict={true} path={timelineUrl}>
                                     <Redirect to={workflowsUrl} />
                                 </Route>
@@ -191,6 +249,9 @@ export function AppRouter({popupManager, history, notificationsManager}: {popupM
                                 <Route path={sensorUrl} component={sensors.component} />
                                 <Route path={eventSourceUrl} component={eventSources.component} />
                                 <Route path={workflowsUrl} component={workflows.component} />
+                                <Route exact={true} path={dashboardUrl + '/:namespace?'} component={dashboard.component} />
+                                <Route exact={true} path={approvalsUrl + '/:namespace?'} component={approvals.component} />
+                                <Route exact={true} path={environmentUrl + '/:namespace?'} component={environment.component} />
                                 <Route path={workflowsEventBindingsUrl} component={workflowEventBindings.component} />
                                 <Route path={workflowTemplatesUrl} component={workflowTemplates.component} />
                                 <Route path={clusterWorkflowTemplatesUrl} component={clusterWorkflowTemplates.component} />

@@ -1,4 +1,4 @@
-import {render, screen, within} from '@testing-library/react';
+import {fireEvent, render, screen, within} from '@testing-library/react';
 import * as React from 'react';
 import {MemoryRouter} from 'react-router-dom';
 
@@ -58,7 +58,7 @@ describe('CronWorkflowRow', () => {
     });
 
     it('shows an error icon and condition message for an error condition', () => {
-        const {container} = renderRow(
+        renderRow(
             workflow([
                 {
                     type: 'SpecError',
@@ -69,21 +69,56 @@ describe('CronWorkflowRow', () => {
         );
 
         const error = screen.getByTitle("template name 'missing' undefined");
-        expect(error.querySelector('.status-icon--error')).toBeInTheDocument();
-        expect(container.querySelector('.fa-clock')).not.toBeInTheDocument();
+        expect(error.querySelector('.status-icon--failed')).toBeInTheDocument();
     });
 
-    it('shows the clock icon when there are no error conditions', () => {
+    it('shows the running phase icon when there are no error conditions', () => {
         const {container} = renderRow(workflow());
 
-        expect(container.querySelector('.fa-clock')).toBeInTheDocument();
-        expect(container.querySelector('.status-icon--error')).not.toBeInTheDocument();
+        expect(container.querySelector('.status-icon--running')).toBeInTheDocument();
+        expect(container.querySelector('.status-icon--failed')).not.toBeInTheDocument();
     });
 
-    it('keeps the pause icon for a suspended workflow without errors', () => {
+    it('keeps the neutral phase icon for a suspended workflow without errors', () => {
         const {container} = renderRow(workflow(undefined, true));
 
-        expect(container.querySelector('.fa-pause')).toBeInTheDocument();
-        expect(container.querySelector('.status-icon--error')).not.toBeInTheDocument();
+        // Suspended schedules fall back to the shared phase icon's neutral
+        // clock styling (one status-icon vocabulary everywhere).
+        expect(container.querySelector('.status-icon--init')).toBeInTheDocument();
+        expect(container.querySelector('.status-icon--failed')).not.toBeInTheDocument();
+    });
+
+    it('shows the last scheduled run and links to the runs of the schedule', () => {
+        const cronWorkflow = workflow();
+        cronWorkflow.status = {active: [], conditions: [], lastScheduledTime: '2024-05-01T00:00:00Z'};
+        renderRow(cronWorkflow);
+
+        const lastRun = screen.getByTitle('Show the runs started by this schedule');
+        expect(lastRun).toHaveAttribute('href', expect.stringContaining('label=workflows.argoproj.io/cron-workflow=my-cron-workflow'));
+    });
+
+    it('shows Never when no run has been recorded', () => {
+        renderRow(workflow());
+        expect(screen.getByTitle('No run recorded yet')).toBeInTheDocument();
+    });
+
+    it('runs the schedule now through the provided callback', () => {
+        const onRunNow = jest.fn();
+        render(
+            <MemoryRouter>
+                <CronWorkflowRow workflow={workflow()} displayISOFormatCreation={false} displayISOFormatNextScheduled={false} onRunNow={onRunNow} />
+            </MemoryRouter>
+        );
+        fireEvent.click(screen.getByRole('button', {name: 'Run schedule my-cron-workflow now'}));
+        expect(onRunNow).toHaveBeenCalledWith(expect.objectContaining({metadata: expect.objectContaining({name: 'my-cron-workflow'})}));
+    });
+
+    it('disables run now for a suspended schedule', () => {
+        render(
+            <MemoryRouter>
+                <CronWorkflowRow workflow={workflow(undefined, true)} displayISOFormatCreation={false} displayISOFormatNextScheduled={false} onRunNow={jest.fn()} />
+            </MemoryRouter>
+        );
+        expect(screen.getByRole('button', {name: 'Run schedule my-cron-workflow now'})).toBeDisabled();
     });
 });

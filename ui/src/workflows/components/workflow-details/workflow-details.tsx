@@ -31,10 +31,12 @@ import {useTransition} from '../../../shared/use-transition';
 import * as Operations from '../../../shared/workflow-operations-map';
 import {WorkflowOperations} from '../../../shared/workflow-operations-map';
 import {WidgetGallery} from '../../../widgets/widget-gallery';
+import {CompareRunsPanel} from '../compare-runs-panel';
 import {EventsPanel} from '../events-panel';
 import {ResubmitWorkflowPanel} from '../resubmit-workflow-panel';
 import {RetryWorkflowNode} from '../retry-workflow-node-panel';
 import {RetryWorkflowPanel} from '../retry-workflow-panel';
+import {WatchRunButton} from '../watch-run-button';
 import {WorkflowArtifacts} from '../workflow-artifacts';
 import {WorkflowLogsViewer} from '../workflow-logs-viewer/workflow-logs-viewer';
 import {WorkflowNodeInfo} from '../workflow-node-info/workflow-node-info';
@@ -62,6 +64,30 @@ const ANIMATION_BUFFER_MS = 20;
 // This is used instead of React state since the state update is async and there's a delay for parent
 // component to render with the updated state.
 let globalDeleteArchived = false;
+// The choice made in the stop dialog (graceful vs force), used the same way as
+// globalDeleteArchived: popup content state is async relative to the promise.
+let globalStopChoice: 'stop' | 'terminate' = 'stop';
+
+function StopCheck(props: {workflowName: string}) {
+    const [terminate, setTerminate] = useState(false);
+    globalStopChoice = terminate ? 'terminate' : 'stop';
+    return (
+        <>
+            <p>How should the run &quot;{props.workflowName}&quot; be stopped?</p>
+            <div className='workflow-details__stop-options'>
+                <label>
+                    <input type='radio' name='stop-choice' checked={!terminate} onChange={() => setTerminate(false)} /> Stop gracefully — running steps finish, no new steps start
+                    (Semaphore &quot;Stop&quot;)
+                </label>
+                <br />
+                <label>
+                    <input type='radio' name='stop-choice' checked={terminate} onChange={() => setTerminate(true)} /> Force stop now — terminate pods immediately (Semaphore
+                    &quot;Force stop&quot;)
+                </label>
+            </div>
+        </>
+    );
+}
 
 function DeleteCheck(props: {isWfInDB: boolean; isWfInCluster: boolean; workflowName: string}) {
     // The local states are created intentionally so that the checkbox works as expected
@@ -202,6 +228,30 @@ export function WorkflowDetails({history, location, match}: RouteComponentProps<
         }
     }, [runActions, workflow?.metadata.uid]);
 
+    // Auto-focus the first failure (Blue Ocean pattern): when a failed run is
+    // opened without a preselected step, select the first failed step and open
+    // its logs. Only done once per run.
+    const focusedFailureUid = useRef<string>();
+    useEffect(() => {
+        const uid = workflow?.metadata?.uid;
+        if (!uid || focusedFailureUid.current === uid) {
+            return;
+        }
+        if (nodeId) {
+            focusedFailureUid.current = uid;
+            return;
+        }
+        if (workflow.status?.phase !== 'Failed' && workflow.status?.phase !== 'Error') {
+            return;
+        }
+        const failed = Object.values(workflow.status.nodes || {}).find(node => node.phase === 'Failed' || node.phase === 'Error');
+        focusedFailureUid.current = uid;
+        if (failed) {
+            setNodeId(failed.id);
+            setSidePanel(`logs:${failed.id}`);
+        }
+    }, [workflow?.metadata?.uid, workflow?.status?.phase, workflow?.status?.nodes, nodeId]);
+
     useEffect(() => {
         setParameters(getInputParametersForNode(nodeId));
     }, [nodeId, workflow]);
@@ -245,6 +295,19 @@ export function WorkflowDetails({history, location, match}: RouteComponentProps<
                             setSidePanel('resubmit');
                         } else if (workflowOperation.title === 'RETRY') {
                             setSidePanel('retry');
+                        } else if (workflowOperation.title === 'STOP') {
+                            // Semaphore-style escalation: choose graceful stop or force terminate
+                            globalStopChoice = 'stop';
+                            popup
+                                .confirm('Confirm stop', () => <StopCheck workflowName={workflow.metadata.name} />)
+                                .then(yes => {
+                                    if (!yes) return;
+                                    const stopped =
+                                        globalStopChoice === 'terminate'
+                                            ? services.workflows.terminate(workflow.metadata.name, workflow.metadata.namespace)
+                                            : services.workflows.stop(workflow.metadata.name, workflow.metadata.namespace);
+                                    stopped.catch(setError);
+                                });
                         } else {
                             popup
                                 .confirm(
@@ -265,6 +328,12 @@ export function WorkflowDetails({history, location, match}: RouteComponentProps<
             action: () => setSidePanel('logs'),
             iconClassName: 'fa fa-bars',
             title: 'Logs'
+        });
+
+        items.push({
+            action: () => setSidePanel('compare'),
+            iconClassName: 'fa fa-exchange-alt',
+            title: 'Compare'
         });
 
         items.push({
@@ -560,13 +629,15 @@ export function WorkflowDetails({history, location, match}: RouteComponentProps<
                 title={'Workflow Details'}
                 toolbar={{
                     breadcrumbs: [
-                        {title: 'Workflows', path: uiUrl('workflows')},
+                        {title: 'Runs', path: uiUrl('workflows')},
                         {title: namespace, path: uiUrl('workflows/' + namespace)},
                         {title: workflowTitle, path: uiUrl('workflows/' + namespace + '/' + name)}
                     ]
                 }}>
                 <h1 className='modern-visually-hidden'>{workflowTitle} workflow details</h1>
-                <div className='workflow-details__command-bar' aria-label='Workflow controls'>
+                <div
+                    className={classNames('workflow-details__command-bar', workflow?.status?.phase ? `workflow-details__command-bar--${workflow.status.phase.toLowerCase()}` : '')}
+                    aria-label='Workflow controls'>
                     <div className='workflow-details__actions'>
                         {primaryToolbarItems.map(item => (
                             <button type='button' className='argo-button argo-button--base workflow-details__primary-action' onClick={item.action} key={item.title as string}>
@@ -578,6 +649,7 @@ export function WorkflowDetails({history, location, match}: RouteComponentProps<
                                 <i className={logsToolbarItem.iconClassName} aria-hidden='true' /> Logs
                             </button>
                         )}
+                        {workflow && <WatchRunButton workflow={workflow} />}
                         {secondaryToolbarItems.length > 0 && (
                             <DropDown
                                 isMenu
@@ -782,6 +854,7 @@ export function WorkflowDetails({history, location, match}: RouteComponentProps<
                         )}
                         {parsedSidePanel.type === 'events' && <EventsPanel namespace={namespace} kind='Pod' name={podName} />}
                         {parsedSidePanel.type === 'share' && <WidgetGallery namespace={namespace} name={name} />}
+                        {parsedSidePanel.type === 'compare' && <CompareRunsPanel workflow={workflow} />}
                         {parsedSidePanel.type === 'yaml' && <WorkflowYamlViewer workflow={workflow} selectedNode={selectedNode} />}
                         {parsedSidePanel.type === 'resubmit' && <ResubmitWorkflowPanel workflow={workflow} isArchived={isArchivedWorkflow(workflow)} />}
                         {parsedSidePanel.type === 'retry' && (

@@ -1,0 +1,159 @@
+# Example for an opted-in namespace. Replace the namespace, subjects, and lock name before applying.
+# Install the stock controller and Argo CRDs first. See docs/approvals.md.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argo-protected-runs
+  namespace: argo
+data:
+  submitter: system:serviceaccount:protected-workflows:release-publisher
+  controller: system:serviceaccount:argo:workflow-controller
+  api: system:serviceaccount:argo:argo-server
+  reconciler: system:serviceaccount:argo:argo-fork-worker
+  retention: system:serviceaccount:argo:argo-fork-auditor
+  mutex: job-wt-release
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-approval-state
+  namespace: protected-workflows
+rules:
+  - apiGroups: ['']
+    resources: [configmaps]
+    verbs: [create]
+  - apiGroups: [argoproj.io]
+    resources: [workflows, workflows/status]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-approval-state
+  namespace: protected-workflows
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-approval-state
+subjects:
+  - kind: ServiceAccount
+    name: argo-server
+    namespace: argo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argo-approval-decider
+  namespace: protected-workflows
+rules:
+  - apiGroups: [platform.argoproj.io]
+    resources: [workflowapprovals]
+    verbs: [decide]
+  - apiGroups: [argoproj.io]
+    resources: [workflows]
+    verbs: [get, list, watch]
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: argo-fork-protected-runs
+spec:
+  failurePolicy: Fail
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [argoproj.io]
+        apiVersions: [v1alpha1]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: [workflows, workflows/status]
+  validations:
+    - expression: >-
+        request.operation == 'CREATE'
+          ? request.userInfo.username in [params.data['submitter'], params.data['controller']]
+          : request.userInfo.username in [params.data['controller'], params.data['reconciler']]
+      message: Only the configured publisher and controllers may write or delete runs in the protected namespace.
+    - expression: >-
+        request.operation == 'DELETE' ||
+        (has(object.spec.synchronization) && has(object.spec.synchronization.mutexes) &&
+          object.spec.synchronization.mutexes.exists(lock, lock.name == params.data['mutex'] &&
+            (!has(lock.namespace) || lock.namespace == request.namespace) && (!has(lock.database) || !lock.database)))
+      message: A protected run must preserve the configured local Argo mutex.
+    - expression: >-
+        request.operation == 'DELETE' || !has(object.metadata.annotations) ||
+        !('approvals.argoproj.io/decisions' in object.metadata.annotations)
+      message: Approval decisions are written to protected records, not Workflow annotations.
+    - expression: >-
+        request.operation != 'CREATE' || !has(object.status) ||
+        ((!has(object.status.nodes) || size(object.status.nodes) == 0) &&
+         !has(object.status.compressedNodes) && !has(object.status.offloadNodeStatusVersion) &&
+         (!has(object.status.phase) || object.status.phase == '' || object.status.phase == 'Pending'))
+      message: A newly created protected run must not preload gate results or offloaded status.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: argo-fork-protected-runs
+spec:
+  policyName: argo-fork-protected-runs
+  paramRef:
+    namespace: argo
+    name: argo-protected-runs
+    parameterNotFoundAction: Deny
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        platform.argoproj.io/protect-runs: 'true'
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: argo-fork-approval-records
+spec:
+  failurePolicy: Fail
+  paramKind:
+    apiVersion: v1
+    kind: ConfigMap
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ['']
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: [configmaps]
+  matchConditions:
+    - name: extension-record
+      expression: >-
+        (object != null && (object.metadata.name.startsWith('argo-approval-') ||
+          object.metadata.name.startsWith('argo-notification-') ||
+          (has(object.metadata.labels) && ('platform.argoproj.io/approval-state' in object.metadata.labels ||
+            'platform.argoproj.io/notification-state' in object.metadata.labels)))) ||
+        (oldObject != null && (oldObject.metadata.name.startsWith('argo-approval-') ||
+          oldObject.metadata.name.startsWith('argo-notification-') ||
+          (has(oldObject.metadata.labels) && ('platform.argoproj.io/approval-state' in oldObject.metadata.labels ||
+            'platform.argoproj.io/notification-state' in oldObject.metadata.labels))))
+  validations:
+    - expression: >-
+        request.operation == 'DELETE'
+          ? request.userInfo.username == params.data['retention']
+          : (request.userInfo.username == params.data['reconciler'] ||
+            (request.operation == 'CREATE' && request.userInfo.username == params.data['api'])) &&
+            (!object.metadata.name.startsWith('argo-approval-') || (has(object.immutable) && object.immutable))
+      message: Only the fork API and worker may create records, only the worker may update them, and only the auditor may prune them.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: argo-fork-approval-records
+spec:
+  policyName: argo-fork-approval-records
+  paramRef:
+    namespace: argo
+    name: argo-protected-runs
+    parameterNotFoundAction: Deny
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        platform.argoproj.io/protect-extension-state: 'true'

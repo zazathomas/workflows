@@ -1,0 +1,55 @@
+#syntax=docker/dockerfile:1.28
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG GIT_TAG=unknown
+ARG GIT_TREE_STATE=unknown
+ARG BUILD_DATE=unknown
+
+# Containerised remote runner (docs/runners.md): the argo-runner binary plus
+# a Docker daemon in one image. The default flavour is rootless DinD; the
+# operator opts into privileged or Sysbox flavours at container start
+# (DIND_MODE). Job containers never receive the inner Docker socket: the
+# executor only ever mounts the per-job workspace volume.
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.23@sha256:8a5046497cda39860b832ffdbe8dd66018a0f05bb01352f533a36e7e2ced66a0 AS builder
+
+RUN apk add --no-cache git make ca-certificates bash
+
+WORKDIR /go/src/github.com/argoproj/argo-workflows
+COPY go.mod .
+COPY go.sum .
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+COPY . .
+
+ARG VERSION
+ARG GIT_COMMIT
+ARG GIT_TAG
+ARG GIT_TREE_STATE
+ARG BUILD_DATE
+ARG TARGETOS
+ARG TARGETARCH
+
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" \
+    make runner VERSION="$VERSION" BUILD_DATE="$BUILD_DATE" GIT_COMMIT="$GIT_COMMIT" GIT_TAG="$GIT_TAG" GIT_TREE_STATE="$GIT_TREE_STATE"
+
+####################################################################################################
+
+# docker:27-dind-rootless runs as the unprivileged user "rootless" (uid 1000)
+# and starts dockerd under rootlesskit; its entrypoint wraps that for us.
+FROM docker:27-dind-rootless@sha256:e2ac8e8f66ae21a060b0a8e3005c70f6ed9441aabf409434463d1f6eecd38026 AS runner
+
+# The default policy is the most restrictive; operators override it with a
+# bind mount or ConfigMap volume (docs/runners.md). COPY --chmod fixes the
+# modes for the unprivileged runtime user (the final stage runs as uid 1000).
+COPY --chmod=0755 --from=builder /go/src/github.com/argoproj/argo-workflows/dist/argo-runner /usr/local/bin/argo-runner
+COPY --chmod=0755 runner/dind-entrypoint.sh /usr/local/bin/argo-runner-dind-entrypoint.sh
+COPY --chmod=0644 runner/default-policy.json /etc/argo-runner/policy.json
+
+# Runner state (credentials, policy overrides) lives under the unprivileged
+# user's home; mount a volume here to persist enrolment across restarts.
+ENV ARGO_RUNNER_CREDENTIALS_DIR=/home/rootless/argo-runner
+RUN mkdir -p /home/rootless/argo-runner && chown rootless:rootless /home/rootless/argo-runner
+
+ENTRYPOINT [ "/usr/local/bin/argo-runner-dind-entrypoint.sh" ]
+CMD [ "run", "--policy", "/etc/argo-runner/policy.json" ]

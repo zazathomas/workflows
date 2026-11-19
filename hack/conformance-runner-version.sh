@@ -45,6 +45,12 @@ install="$work/install.yaml"
 curl -fsSL --retry 3 "https://github.com/argoproj/argo-workflows/releases/download/$tag/namespace-install.yaml" -o "$install"
 k create namespace builds --dry-run=client -o yaml | k apply -f - >/dev/null
 k -n builds apply --server-side -f "$install" >/dev/null
+# CRDs become discoverable asynchronously after the server-side apply. Wait
+# before creating workflow RBAC or resources that validate against them.
+k wait --for=condition=Established --timeout=120s \
+  crd/workflows.argoproj.io crd/workflowtasksets.argoproj.io \
+  crd/workflowtaskresults.argoproj.io >/dev/null
+k -n builds rollout status deployment/workflow-controller --timeout=180s >/dev/null
 # Stock controller/agent end to end. The Argo API server is not involved.
 k -n builds scale deployment/argo-server --replicas=0 >/dev/null
 k -n builds set env deployment/workflow-controller ARGO_EXECUTOR_PLUGINS=true >/dev/null
@@ -55,7 +61,7 @@ k -n builds create rolebinding controller-reconcile-tasksets --role=controller-r
 pg_image=postgres:17.4-alpine@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5
 postgres_password=$(openssl rand -hex 24)
 docker run -d --name "$pg" --network kind -e "POSTGRES_PASSWORD=$postgres_password" "$pg_image" >/dev/null
-for i in $(seq 1 45); do
+for _ in $(seq 1 45); do
   docker exec "$pg" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 && break
   sleep 1
 done
@@ -105,14 +111,14 @@ docker run -d --name "$runner" --network kind --privileged --cgroupns=private --
   --mount "type=bind,src=$work/policy.json,dst=/test-policy.json,readonly" \
   "$runner_image" run --once --policy /test-policy.json --flavour dind >/dev/null
 rm -f "$work/runner.env"
-for i in $(seq 1 60); do
+for _ in $(seq 1 60); do
   if docker logs "$runner" 2>&1 | grep 'Enrolled as runner' >/dev/null; then break; fi
   [[ $(docker inspect -f '{{.State.Running}}' "$runner") == true ]]
   sleep 1
 done
 docker logs "$runner" 2>&1 | grep 'Enrolled as runner' >/dev/null
 wf=$(k create -f "$root/examples/mixed-runner-broker.yaml" -o jsonpath='{.metadata.name}')
-for i in $(seq 1 120); do
+for _ in $(seq 1 120); do
   phase=$(k -n builds get workflow "$wf" -o jsonpath='{.status.phase}')
   if [[ $phase == Succeeded ]]; then break; fi
   if [[ $phase == Failed || $phase == Error ]]; then

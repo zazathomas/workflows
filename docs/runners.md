@@ -6,7 +6,12 @@ Workers use single-use, pool-scoped join tokens, then sign requests with their e
 
 ## Containerised runner (DinD)
 
-`Dockerfile.runner` builds one image with the runner binary and a Docker daemon. The default flavour is rootless DinD; the operator picks the flavour at start with `DIND_MODE`:
+`Dockerfile.runner` builds one image with the runner binary and a Docker daemon.
+It pins Docker 29.10.0 rootless DinD and rebuilds runc 1.5.3, RootlessKit 3.3.0 and the containerd 2.4.2 shim with `golang.org/x/net` 0.62.0 to fix vulnerabilities in the bundled helpers.
+The helper sources have pinned commits and archive checksums in the Dockerfile.
+The worker omits the unused Compose, buildx and `ctr` clients.
+When updating these pins, scan both architectures and run the DinD smoke test and stock-Argo runner conformance before publishing.
+The default flavour is rootless DinD; the operator picks the flavour at start with `DIND_MODE`:
 
 | Mode | Start with | Notes |
 | --- | --- | --- |

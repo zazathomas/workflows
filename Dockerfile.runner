@@ -35,9 +35,41 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 
 ####################################################################################################
 
-# docker:27-dind-rootless runs as the unprivileged user "rootless" (uid 1000)
-# and starts dockerd under rootlesskit; its entrypoint wraps that for us.
-FROM docker:27-dind-rootless@sha256:e2ac8e8f66ae21a060b0a8e3005c70f6ed9441aabf409434463d1f6eecd38026 AS runner
+# Rebuild the affected helpers from the same releases bundled by Docker, with
+# patched x/net. runc needs native CGO and libseccomp for each target platform.
+FROM golang:1.27.3-alpine3.23@sha256:8a5046497cda39860b832ffdbe8dd66018a0f05bb01352f533a36e7e2ced66a0 AS runtime-tools
+RUN apk add --no-cache bash build-base git libseccomp-dev libseccomp-static linux-headers make
+
+# runc v1.5.3, RootlessKit v3.3.0 and containerd v2.4.2, pinned by source hash.
+ADD --checksum=sha256:ce378072179f55547e944e4c54fb7f6085ec496b23a76882aeaed105a37095a3 https://codeload.github.com/opencontainers/runc/tar.gz/46365c62967c76a765a5e347f48f0c7b3b571fe9 /tmp/runc.tar.gz
+ADD --checksum=sha256:e560e4d46b8e168ea02d34d1cd95306eaa6361568a09d8b8ac92d37f4f5e7c59 https://codeload.github.com/rootless-containers/rootlesskit/tar.gz/888c3189e9cdf34dcdb19011e1c7c34eb94b5393 /tmp/rootlesskit.tar.gz
+ADD --checksum=sha256:e38df0eeb40d2304f3450edb148aee838cb0a57f3976a47c78870f92c80f1796 https://codeload.github.com/containerd/containerd/tar.gz/b7a25261e029d68978bbf290df0a62fc819b3c51 /tmp/containerd.tar.gz
+RUN mkdir -p /src/runc /src/rootlesskit /src/containerd /out && \
+    for tool in runc rootlesskit containerd; do \
+      tar -xzf "/tmp/$tool.tar.gz" -C "/src/$tool" --strip-components=1; \
+    done
+ENV GOFLAGS=-mod=mod
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    cd /src/runc && go mod edit -require=golang.org/x/net@v0.62.0 && \
+    make static BUILDTAGS="seccomp urfave_cli_no_docs" \
+      COMMIT=46365c62967c76a765a5e347f48f0c7b3b571fe9 EXTRA_LDFLAGS="-s -w" && \
+    cp runc /out/runc
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    cd /src/rootlesskit && go mod edit -require=golang.org/x/net@v0.62.0 && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/rootlesskit ./cmd/rootlesskit
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    cd /src/containerd && go mod edit -require=golang.org/x/net@v0.62.0 && \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
+      -o /out/containerd-shim-runc-v2 ./cmd/containerd-shim-runc-v2
+
+# The image still defaults to the unprivileged rootless user (uid 1000).
+FROM docker:29.10.0-dind-rootless@sha256:5a703ad0d72cd5e4fb4beca8024d6eddef6d22a46ed1d9812bf3d24ff43ccbce AS runner
+USER root
+# Jobs run images; the worker does not need Docker's build/Compose plugins or
+# the ctr debugging client. Keep the daemon, shim, runc and rootless support.
+RUN rm -rf /usr/local/libexec/docker/cli-plugins /usr/local/bin/docker-compose /usr/local/bin/ctr
+COPY --from=runtime-tools /out/ /usr/local/bin/
+USER rootless
 
 # The default policy is the most restrictive; operators override it with a
 # bind mount or ConfigMap volume (docs/runners.md). COPY --chmod fixes the

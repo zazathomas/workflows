@@ -1,47 +1,47 @@
 @import 'node_modules/argo-ui/src/styles/config';
 
 .wf-row-labels {
-  display: flex; 
-  flex-wrap: wrap;
-  align-items: center;
-  height: 100%;
-  $gutter: 0.5em;
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-
-  .tag {
-    line-height: normal;
-    background-color: var(--surface-sunken);
-    border: 0;
-    border-radius: var(--radius-sm);
-    padding: 0;
-    font: inherit;
-    height: auto;
-    margin: $gutter 0;
-    margin-right: 10px;
     display: flex;
-    overflow: hidden;
-    cursor: pointer;
+    flex-wrap: wrap;
+    align-items: center;
+    height: 100%;
+    $gutter: 0.5em;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 
-    &:focus-visible {
+    .tag {
+        line-height: normal;
+        background-color: var(--surface-sunken);
+        border: 0;
+        border-radius: var(--radius-sm);
+        padding: 0;
+        font: inherit;
+        height: auto;
+        margin: $gutter 0;
+        margin-right: 10px;
+        display: flex;
+        overflow: hidden;
+        cursor: pointer;
 
-      outline-offset: 2px;
+        &:focus-visible {
+            outline-offset: 2px;
+        }
+
+        &:hover .key {
+            text-decoration: underline;
+        }
+
+        .key,
+        .value {
+            padding: 0.5em 8px;
+        }
+
+        .key {
+            color: var(--text-secondary);
+        }
+
+        .value {
+            color: var(--accent-soft-text);
+            background-color: var(--accent-soft);
+        }
     }
-
-    &:hover .key {
-      text-decoration: underline;
-    }
-
-    .key, .value {
-      padding: 0.5em 8px;
-    }
-
-    .key {
-      color: var(--text-secondary);
-    }
-
-    .value {
-      color: var(--accent-soft-text);
-      background-color: var(--accent-soft);
-    }
-  }
 }

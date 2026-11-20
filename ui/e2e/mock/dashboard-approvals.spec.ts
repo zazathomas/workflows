@@ -17,7 +17,15 @@ const runningWorkflow = {
         conditions: [],
         nodes: {
             'waiting-run': {id: 'waiting-run', name: 'waiting-run', displayName: 'waiting-run', type: 'Pod', phase: 'Succeeded', children: ['wait-approval']},
-            'wait-approval': {id: 'wait-approval', name: 'wait-approval', displayName: 'wait-approval', type: 'Suspend', phase: 'Running', startedAt: '2025-06-01T00:00:00Z', children: []}
+            'wait-approval': {
+                id: 'wait-approval',
+                name: 'wait-approval',
+                displayName: 'wait-approval',
+                type: 'Suspend',
+                phase: 'Running',
+                startedAt: '2025-06-01T00:00:00Z',
+                children: []
+            }
         }
     }
 };
@@ -56,9 +64,10 @@ async function mockApi(page: Page) {
             decisions.push({path, body: request.postDataJSON()});
             json = {};
         } else if (path.endsWith('/extensions/run-view')) {
-            json = new URL(request.url()).searchParams.get('view') === 'gate-count'
-                ? {count: decisions.length > 0 ? 0 : 1}
-                : {metadata: {resourceVersion: '1'}, items: decisions.length > 0 ? [] : [runningWorkflow, createdWorkflow]};
+            json =
+                new URL(request.url()).searchParams.get('view') === 'gate-count'
+                    ? {count: decisions.length > 0 ? 0 : 1}
+                    : {metadata: {resourceVersion: '1'}, items: decisions.length > 0 ? [] : [runningWorkflow, createdWorkflow]};
         } else if (path.endsWith('/workflows/argo') && request.method() === 'POST') {
             created.push(request.postDataJSON());
             json = createdWorkflow;

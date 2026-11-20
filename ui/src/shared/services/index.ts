@@ -11,7 +11,6 @@ import {SensorService} from './sensor-service';
 import {WorkflowTemplateService} from './workflow-template-service';
 import {WorkflowsService} from './workflows-service';
 
-
 interface Services {
     info: typeof InfoService;
     approvals: typeof ApprovalsService;

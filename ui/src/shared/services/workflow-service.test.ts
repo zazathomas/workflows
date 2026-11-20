@@ -299,5 +299,4 @@ describe('workflow service', () => {
         expect(getSpy).not.toHaveBeenCalled();
         expect(getClusterLogs).not.toHaveBeenCalled();
     });
-
 });

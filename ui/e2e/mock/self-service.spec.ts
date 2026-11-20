@@ -1,5 +1,7 @@
 import {expect, Page, test} from '@playwright/test';
 
+import {MockWorkflow, workflowListResponse} from './workflow-list-mock';
+
 const template = {
     apiVersion: 'argoproj.io/v1alpha1',
     kind: 'WorkflowTemplate',
@@ -29,7 +31,11 @@ const workflow = {
     }
 };
 
-async function mockApi(page: Page, failFirst = false) {
+async function mockApi(
+    page: Page,
+    failFirst = false,
+    workflowItems: MockWorkflow[] = [workflow, {...workflow, metadata: {...workflow.metadata, name: 'alpha-run', uid: 'run-2'}}]
+) {
     let attempts = 0;
     const submissions: unknown[] = [];
     await page.route('**/api/**', async route => {
@@ -71,8 +77,7 @@ async function mockApi(page: Page, failFirst = false) {
                 json = {message: 'Submission failed'};
             } else json = workflow;
         } else if (path.endsWith('/workflows/argo/sample-run')) json = workflow;
-        else if (path.endsWith('/workflows/argo'))
-            json = {metadata: {resourceVersion: '1'}, items: [workflow, {...workflow, metadata: {...workflow.metadata, name: 'alpha-run', uid: 'run-2'}}]};
+        else if (path.endsWith('/workflows/argo')) json = workflowListResponse(workflowItems, new URL(request.url()).searchParams);
         else if (path.includes('/workflow-events/')) return route.fulfill({status: 200, contentType: 'text/event-stream', body: ': mock\n\n'});
         await route.fulfill({status, contentType: 'application/json', body: JSON.stringify(json)});
     });
@@ -541,9 +546,14 @@ test('run name and label search modes retain applied filters', async ({page}) =>
     await page.getByRole('combobox', {name: 'Run name or title contains'}).fill('sample');
     await expect(page).toHaveURL(/Contains=sample/);
     await page.getByLabel('Run search filter').selectOption('label');
+    const combinedSearch = page.waitForRequest(
+        request => new URL(request.url()).searchParams.get('listOptions.fieldSelector') === 'ext.nameTitleContains=73616d706c65,ext.labelContains=706c6174'
+    );
     await page.getByRole('combobox', {name: 'Run label contains'}).fill('plat');
+    await combinedSearch;
     await expect(page).toHaveURL(/labelContains=plat/);
     await expect(page.getByRole('rowheader').filter({hasText: 'sample-run'})).toBeVisible();
+    await expect(page.getByRole('rowheader').filter({hasText: 'alpha-run'})).toHaveCount(0);
     await page.getByLabel('Run search filter').selectOption('name');
     await expect(page.getByRole('combobox', {name: 'Run name or title contains'})).toHaveValue('sample');
     await expect(page.getByLabel('Active filters')).toContainText('Label contains: plat');
@@ -552,7 +562,9 @@ test('run name and label search modes retain applied filters', async ({page}) =>
 test('the filtered runs empty state offers the panel label for clearing filters', async ({page}) => {
     await mockApi(page);
     await page.goto('/workflows/argo');
+    const search = page.waitForRequest(request => new URL(request.url()).searchParams.get('listOptions.fieldSelector') === 'ext.nameTitleContains=6e6f7468696e672d6d617463686573');
     await page.getByRole('combobox', {name: 'Run name or title contains'}).fill('nothing-matches');
+    await search;
     const emptyState = page.locator('.zero-state');
     await expect(emptyState.getByRole('heading', {name: 'No matching runs'})).toBeVisible();
     await expect(emptyState.getByRole('button', {name: 'Clear all'})).toBeVisible();
@@ -561,80 +573,66 @@ test('the filtered runs empty state offers the panel label for clearing filters'
     await expect(page.getByRole('rowheader').filter({hasText: 'sample-run'})).toBeVisible();
 });
 
-test('run label contains searches label keys and values across server pages', async ({page}) => {
-    await mockApi(page);
-    await page.route('**/api/v1/workflows/argo?*', route => {
-        const params = new URL(route.request().url()).searchParams;
-        const scanned = params.get('listOptions.limit') === '200';
-        const second = params.get('listOptions.continue') === 'next';
-        const item = second
-            ? {...workflow, metadata: {...workflow.metadata, name: 'audit-run', uid: 'second', labels: {'group/owner': 'AuditTeam'}}}
-            : {...workflow, metadata: {...workflow.metadata, name: 'other-run', uid: 'first', labels: {team: 'platform'}}};
-        return route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({metadata: {resourceVersion: '1', ...(scanned && !second ? {continue: 'next'} : {})}, items: [item]})
-        });
-    });
-    await page.goto('/workflows/argo');
+test('run label contains filters label keys and values server-side before pagination', async ({page}) => {
+    await mockApi(page, false, [
+        {...workflow, metadata: {...workflow.metadata, name: 'other-run', uid: 'first'}},
+        {...workflow, metadata: {...workflow.metadata, name: 'audit-run', uid: 'second', labels: {'group/owner': 'AuditTeam'}}},
+        {...workflow, metadata: {...workflow.metadata, name: 'audit-label-run', uid: 'third', labels: {'audit/group': 'platform'}}}
+    ]);
+    await page.goto('/workflows/argo?limit=2');
     await page.getByLabel('Run search filter').selectOption('label');
-    await page.getByRole('combobox', {name: 'Run label contains'}).fill('audit');
+    const search = page.waitForRequest(request => new URL(request.url()).searchParams.get('listOptions.fieldSelector') === 'ext.labelContains=4175446954');
+    await page.getByRole('combobox', {name: 'Run label contains'}).fill(' AuDiT ');
+    expect(new URL((await search).url()).searchParams.get('listOptions.limit')).toBe('2');
     await expect(page.getByRole('rowheader').filter({hasText: 'audit-run'})).toBeVisible();
+    await expect(page.getByRole('rowheader').filter({hasText: 'audit-label-run'})).toBeVisible();
     await expect(page.getByRole('rowheader').filter({hasText: 'other-run'})).toHaveCount(0);
 });
 
-test('run name filter finds title matches on later server pages', async ({page}) => {
-    await mockApi(page);
-    let scannedSecondPage = false;
-    await page.route('**/api/v1/workflows/argo?*', route => {
-        const params = new URL(route.request().url()).searchParams;
-        const scanned = params.get('listOptions.limit') === '200';
-        const second = params.get('listOptions.continue') === 'next';
-        if (scanned && second) scannedSecondPage = true;
-        const item = second
-            ? {...workflow, metadata: {...workflow.metadata, name: 'technical-id', uid: 'second', annotations: {'workflows.argoproj.io/title': 'Daily cleanup'}}}
-            : {...workflow, metadata: {...workflow.metadata, name: 'cleanup-by-name', uid: 'first'}};
-        return route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({metadata: {resourceVersion: '1', ...(scanned && !second ? {continue: 'next'} : {})}, items: [item]})
-        });
-    });
-    await page.goto('/workflows/argo');
+test('run name filter requests server-side name and title matches', async ({page}) => {
+    await mockApi(page, false, [
+        {...workflow, metadata: {...workflow.metadata, name: 'other-run', uid: 'first'}},
+        {...workflow, metadata: {...workflow.metadata, name: 'cleanup-by-name', uid: 'second'}},
+        {...workflow, metadata: {...workflow.metadata, name: 'technical-id', uid: 'third', annotations: {'workflows.argoproj.io/title': 'Daily cleanup'}}}
+    ]);
+    await page.goto('/workflows/argo?limit=2');
+    const search = page.waitForRequest(request => new URL(request.url()).searchParams.get('listOptions.fieldSelector') === 'ext.nameTitleContains=636c65616e7570');
     await page.getByRole('combobox', {name: 'Run name or title contains'}).fill('cleanup');
+    expect(new URL((await search).url()).searchParams.get('listOptions.limit')).toBe('2');
     await expect(page.getByRole('rowheader').filter({hasText: 'Daily cleanup'})).toBeVisible();
     await expect(page.getByRole('rowheader').filter({hasText: 'cleanup-by-name'})).toBeVisible();
-    expect(scannedSecondPage).toBe(true);
+    await expect(page.getByRole('rowheader').filter({hasText: 'other-run'})).toHaveCount(0);
 });
 
-test('title search paginates matches across scanned run pages', async ({page}) => {
-    await mockApi(page);
-    await page.route('**/api/v1/workflows/argo?*', route => {
-        const params = new URL(route.request().url()).searchParams;
-        const scanned = params.get('listOptions.limit') === '200';
-        const second = params.get('listOptions.continue') === 'next';
-        const start = second ? 4 : 1;
-        const items = Array.from({length: 3}, (_, index) => ({
-            ...workflow,
-            metadata: {
-                ...workflow.metadata,
-                name: `technical-${start + index}`,
-                uid: `uid-${start + index}`,
-                annotations: {'workflows.argoproj.io/title': `Cleanup ${start + index}`}
-            }
-        }));
-        return route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({metadata: {resourceVersion: '1', ...(scanned && !second ? {continue: 'next'} : {})}, items})
-        });
-    });
+test('title search paginates server-filtered matches', async ({page}) => {
+    const items = Array.from({length: 6}, (_, index) => ({
+        ...workflow,
+        metadata: {
+            ...workflow.metadata,
+            name: `technical-${index + 1}`,
+            uid: `uid-${index + 1}`,
+            annotations: {'workflows.argoproj.io/title': `Cleanup ${index + 1}`}
+        }
+    }));
+    await mockApi(page, false, [workflow, ...items]);
     await page.goto('/workflows/argo?limit=5');
+    const search = page.waitForRequest(request => new URL(request.url()).searchParams.get('listOptions.fieldSelector') === 'ext.nameTitleContains=636c65616e7570');
     await page.getByRole('combobox', {name: 'Run name or title contains'}).fill('cleanup');
+    expect(new URL((await search).url()).searchParams.get('listOptions.limit')).toBe('5');
     await expect(page.getByRole('rowheader')).toHaveCount(5);
+    await expect(page.getByRole('rowheader').filter({hasText: 'Cleanup 5'})).toBeVisible();
+    await expect(page.getByRole('rowheader').filter({hasText: 'sample-run'})).toHaveCount(0);
+    const nextPage = page.waitForRequest(request => {
+        const params = new URL(request.url()).searchParams;
+        return params.get('listOptions.fieldSelector') === 'ext.nameTitleContains=636c65616e7570' && params.get('listOptions.continue') === '5';
+    });
     await page.getByRole('button', {name: 'Next page'}).click();
+    expect(new URL((await nextPage).url()).searchParams.get('listOptions.limit')).toBe('5');
     await expect(page.getByRole('rowheader')).toHaveCount(1);
+    await expect(page.getByRole('rowheader').filter({hasText: 'Cleanup 6'})).toBeVisible();
     await expect(page.getByRole('button', {name: 'First page'})).toBeEnabled();
+    await page.getByRole('button', {name: 'First page'}).click();
+    await expect(page.getByRole('rowheader')).toHaveCount(5);
 });
 
 test('job name filter finds namespace and cluster title matches', async ({page}) => {

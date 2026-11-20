@@ -22,7 +22,9 @@ export function queryParams(filter: {
         fieldSelectorParams(filter.namespace, filter.name, filter.pagination?.includeRemainingItemCount),
         substringSelector('nameTitleContains', filter.nameTitleContains),
         substringSelector('labelContains', filter.labelContains)
-    ].filter(Boolean).join(',');
+    ]
+        .filter(Boolean)
+        .join(',');
     if (fieldSelector.length > 0) {
         queryParams.push(`listOptions.fieldSelector=${fieldSelector}`);
     }

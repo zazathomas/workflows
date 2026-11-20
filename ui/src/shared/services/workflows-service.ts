@@ -321,10 +321,7 @@ export const WorkflowsService = {
 
     getContainerLogs(workflow: Workflow, podName: string, nodeId: string, container: string, grep: string, archived: boolean): Observable<LogEntry> {
         const getLogsFromArtifacts = (targetWorkflow = workflow) => this.getContainerLogsFromArtifacts(targetWorkflow, nodeId, container, grep, archived);
-        const getLogsFromCluster = () =>
-            isRunnerNode(workflow, workflow.status.nodes[nodeId])
-                ? EMPTY
-                : this.getContainerLogsFromCluster(workflow, podName, container, grep);
+        const getLogsFromCluster = () => (isRunnerNode(workflow, workflow.status.nodes[nodeId]) ? EMPTY : this.getContainerLogsFromCluster(workflow, podName, container, grep));
         // whether the artifact repository holds archived logs for this selection:
         // the selected node's, or any node's in the all-pods view
         const hasArchivedLogs = (targetWorkflow: Workflow) => (nodeId ? hasArtifactLogs(targetWorkflow, nodeId, container) : hasAnyArtifactLogs(targetWorkflow, container));

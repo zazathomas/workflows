@@ -289,7 +289,6 @@
     }
 }
 
-
 @media (max-width: 640px) {
     .argo-dropdown__content.is-menu {
         right: 10px;
@@ -486,7 +485,6 @@
         background: color-mix(in srgb, var(--status-pending-soft) 45%, var(--surface));
     }
 }
-
 
 // Upcoming-runs strip on the schedule detail page.
 .cron-workflow-details__upcoming {

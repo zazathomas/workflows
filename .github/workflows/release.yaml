@@ -34,7 +34,8 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           if [[ ! "$REF_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-            echo "Tag $REF_NAME is not a release tag; use the upstream version, such as 4.1.6." >&2
+            echo "Tag $REF_NAME is not a release tag;" \
+              'use the upstream version, such as 4.1.6.' >&2
             exit 1
           fi
       - name: Require workflows repository name
@@ -42,7 +43,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           if [[ "${REPOSITORY##*/}" != workflows ]]; then
-            echo 'Rename the GitHub repository to workflows before tagging a release.' >&2
+            echo 'Rename the GitHub repository to workflows before tagging' \
+              'a release.' >&2
             exit 1
           fi
       - name: Require a commit on the default branch
@@ -52,15 +54,19 @@ jobs:
           BRANCH: ${{ github.event.repository.default_branch }}
           SHA: ${{ github.sha }}
         run: |
-          # Only a commit that landed on the default branch (and therefore went
-          # through its required CI checks) may publish. `compare/<sha>...<branch>`
-          # reports "ahead" when the branch is ahead of the tag's commit, i.e.
-          # the tag's commit is an ancestor of the branch.
-          status=$(gh api "repos/$REPOSITORY/compare/$SHA...$BRANCH" --jq .status)
+          # Only commits on the default branch may publish. The comparison
+          # reports "ahead" when the tag commit is an ancestor of the branch.
+          status=$(gh api "repos/$REPOSITORY/compare/$SHA...$BRANCH" \
+            --jq .status)
           case "$status" in
             ahead|identical) echo "$BRANCH contains $SHA" ;;
-            behind) echo "Tag commit $SHA is not on $BRANCH yet; merge it first." >&2; exit 1 ;;
-            *) echo "Tag commit $SHA is not on $BRANCH (compare status: $status); merge it first." >&2; exit 1 ;;
+            behind)
+              echo "Tag commit $SHA is not on $BRANCH yet; merge it first." >&2
+              exit 1 ;;
+            *)
+              echo "Tag commit $SHA is not on $BRANCH" \
+                "(compare status: $status); merge it first." >&2
+              exit 1 ;;
           esac
       - run: make test-hack
 
@@ -77,7 +83,9 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      # docker/setup-buildx-action v3
+      - uses: >-
+          docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
       - name: Capture build metadata
         id: meta
         env:
@@ -85,21 +93,24 @@ jobs:
         run: |
           echo "date=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
           echo "image=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+      # docker/login-action v4.4.0
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build amd64 once and upload by digest
         id: amd64
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        # docker/build-push-action v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           target: server
           platforms: linux/amd64
           provenance: false
           sbom: false
-          outputs: type=image,name=${{ steps.meta.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          outputs: "type=image,name=${{ steps.meta.outputs.image }},\
+            push-by-digest=true,name-canonical=true,push=true"
           build-args: |
             VERSION=${{ github.ref_name }}
             GIT_COMMIT=${{ github.sha }}
@@ -110,14 +121,16 @@ jobs:
           cache-to: type=gha,mode=max,scope=server-image-amd64
       - name: Build arm64 once and upload by digest
         id: arm64
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        # docker/build-push-action v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           target: server
           platforms: linux/arm64
           provenance: false
           sbom: false
-          outputs: type=image,name=${{ steps.meta.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          outputs: "type=image,name=${{ steps.meta.outputs.image }},\
+            push-by-digest=true,name-canonical=true,push=true"
           build-args: |
             VERSION=${{ github.ref_name }}
             GIT_COMMIT=${{ github.sha }}
@@ -126,7 +139,8 @@ jobs:
             BUILD_DATE=${{ steps.meta.outputs.date }}
           cache-from: type=gha,scope=server-image
           cache-to: type=gha,mode=max,scope=server-image-arm64
-      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # sigstore/cosign-installer v4.1.2
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
       - name: Scan and attest the exact images
         env:
           IMAGE: ${{ steps.meta.outputs.image }}
@@ -135,21 +149,32 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          scanner=aquasec/trivy:0.67.2@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08
+          scanner=aquasec/trivy:0.67.2
+          scanner+=@sha256:\
+          e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08
           for arch in amd64 arm64; do
-            case "$arch" in amd64) digest=$AMD64 ;; arm64) digest=$ARM64 ;; esac
+            case "$arch" in
+              amd64) digest=$AMD64 ;;
+              arm64) digest=$ARM64 ;;
+            esac
             [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
             target="$IMAGE@$digest"
             docker pull --platform "linux/$arch" "$target"
-            [[ $(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$target") == "linux/$arch" ]]
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$scanner" \
-              image --image-src docker --scanners vuln --severity HIGH,CRITICAL --exit-code 1 "$target"
-            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD/artifacts:/artifacts" "$scanner" \
-              image --image-src docker --format cyclonedx --output "/artifacts/sbom-$arch.cdx.json" "$target"
+            platform=$(docker image inspect \
+              --format '{{.Os}}/{{.Architecture}}' "$target")
+            [[ "$platform" == "linux/$arch" ]]
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              "$scanner" image --image-src docker --scanners vuln \
+              --severity HIGH,CRITICAL --exit-code 1 "$target"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$PWD/artifacts:/artifacts" "$scanner" \
+              image --image-src docker --format cyclonedx \
+              --output "/artifacts/sbom-$arch.cdx.json" "$target"
             cosign sign --yes "$target"
-            cosign attest --yes --predicate "artifacts/sbom-$arch.cdx.json" --type cyclonedx "$target"
+            cosign attest --yes --predicate "artifacts/sbom-$arch.cdx.json" \
+              --type cyclonedx "$target"
           done
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: sbom
           path: artifacts/sbom-*.cdx.json
@@ -162,7 +187,8 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          digest=$(bash hack/promote-server-index.sh "$IMAGE" "$REF_NAME" "$AMD64" "$ARM64")
+          digest=$(bash hack/promote-server-index.sh \
+            "$IMAGE" "$REF_NAME" "$AMD64" "$ARM64")
           cosign sign --yes "$IMAGE@$digest"
           echo "Published $IMAGE@$digest"
 
@@ -178,12 +204,15 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      # docker/setup-buildx-action v3
+      - uses: >-
+          docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
       - name: Capture build metadata
         id: meta
         run: echo "date=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
       - name: Build the runner image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        # docker/build-push-action v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           file: Dockerfile.runner
@@ -198,29 +227,38 @@ jobs:
             BUILD_DATE=${{ steps.meta.outputs.date }}
           cache-from: type=gha,scope=runner-image
           cache-to: type=gha,mode=max,scope=runner-image
-      - run: docker run --rm --entrypoint argo-runner workflows-runner:release version
+      - run: >-
+          docker run --rm --entrypoint argo-runner
+          workflows-runner:release version
       - name: Scan runner image and generate SBOM
         run: |
           mkdir -p runner-artifacts
+          scanner=aquasec/trivy:0.67.2
+          scanner+=@sha256:\
+          e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$PWD/runner-artifacts:/artifacts" aquasec/trivy:0.67.2@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08 \
-            image --image-src docker --scanners vuln --severity HIGH,CRITICAL --exit-code 1 workflows-runner:release
+            -v "$PWD/runner-artifacts:/artifacts" "$scanner" \
+            image --image-src docker --scanners vuln \
+            --severity HIGH,CRITICAL --exit-code 1 workflows-runner:release
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$PWD/runner-artifacts:/artifacts" aquasec/trivy:0.67.2@sha256:e2b22eac59c02003d8749f5b8d9bd073b62e30fefaef5b7c8371204e0a4b0c08 \
-            image --image-src docker --format cyclonedx --output /artifacts/runner-sbom.cdx.json workflows-runner:release
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+            -v "$PWD/runner-artifacts:/artifacts" "$scanner" \
+            image --image-src docker --format cyclonedx \
+            --output /artifacts/runner-sbom.cdx.json workflows-runner:release
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: runner-sbom
           path: runner-artifacts/runner-sbom.cdx.json
           if-no-files-found: error
-      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+      # docker/login-action v4.4.0
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish multi-arch runner image
         id: publish-runner
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        # docker/build-push-action v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           file: Dockerfile.runner
@@ -234,7 +272,8 @@ jobs:
             GIT_TREE_STATE=clean
             BUILD_DATE=${{ steps.meta.outputs.date }}
           cache-from: type=gha,scope=runner-image
-      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # sigstore/cosign-installer v4.1.2
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
       - name: Sign and attest the published runner index
         env:
           REPOSITORY: ${{ github.repository }}
@@ -247,5 +286,7 @@ jobs:
             exit 1
           fi
           cosign sign --yes "$image@$DIGEST"
-          cosign attest --yes --predicate runner-artifacts/runner-sbom.cdx.json --type cyclonedx "$image@$DIGEST"
+          cosign attest --yes \
+            --predicate runner-artifacts/runner-sbom.cdx.json \
+            --type cyclonedx "$image@$DIGEST"
           echo "Published $image@$DIGEST"

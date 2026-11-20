@@ -8,7 +8,9 @@ One image covers all of them, so a release tag names the newest upstream release
 
 Merge and verify the CI checks on the default branch first: Go tests, the per-release API contract, UI unit, lint, and browser tests, and the production image build with its runtime vulnerability scan.
 Dev and build dependencies are scanned by the nightly run, which also rescans the image.
-The release workflow does not repeat those suites: it calls the compatibility matrix, refuses a tag whose commit is not on the default branch, then builds each image once, scans it, and publishes, signs, and attests the result.
+The release workflow first validates the tag format, repository name, and commit's presence on the default branch before starting the full compatibility matrix.
+It then builds images with release-tag metadata, scans them, and publishes, signs, and attests the result.
+Server builds import both their architecture-specific cache and the shared CI cache; they still scan and attest the exact release digests for both architectures.
 
 ## Release tags
 

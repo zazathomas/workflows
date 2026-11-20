@@ -20,7 +20,10 @@ jobs:
   # and `guard` refuses a tag that is not on the default branch, so the suites
   # cannot be skipped by tagging an unmerged commit.
   compatibility:
+    needs: guard
     uses: ./.github/workflows/compatibility.yaml
+    with:
+      scope: full
     permissions:
       contents: read
 
@@ -117,7 +120,9 @@ jobs:
             GIT_TAG=${{ github.ref_name }}
             GIT_TREE_STATE=clean
             BUILD_DATE=${{ steps.meta.outputs.date }}
-          cache-from: type=gha,scope=server-image
+          cache-from: |
+            type=gha,scope=server-image-amd64
+            type=gha,scope=server-image
           cache-to: type=gha,mode=max,scope=server-image-amd64
       - name: Build arm64 once and upload by digest
         id: arm64
@@ -137,7 +142,9 @@ jobs:
             GIT_TAG=${{ github.ref_name }}
             GIT_TREE_STATE=clean
             BUILD_DATE=${{ steps.meta.outputs.date }}
-          cache-from: type=gha,scope=server-image
+          cache-from: |
+            type=gha,scope=server-image-arm64
+            type=gha,scope=server-image
           cache-to: type=gha,mode=max,scope=server-image-arm64
       # sigstore/cosign-installer v4.1.2
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6

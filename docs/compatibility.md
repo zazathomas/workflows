@@ -26,11 +26,29 @@ The image is published only after both checks pass for every listed release:
 
 A second disposable cluster per release runs stock Argo pods, the standalone PostgreSQL broker, and a Docker runner outside Kubernetes through `hack/conformance-runner-version.sh`.
 
-[`.github/workflows/compatibility.yaml`](../.github/workflows/compatibility.yaml) runs the matrix on a schedule, on demand, and before a release; its `scope: contract` dispatch skips the cluster jobs.
-Pull requests only run the contract check, so a schema break is caught before merge.
+[`.github/workflows/ci-build.yaml`](../.github/workflows/ci-build.yaml) calls [the reusable compatibility workflow](../.github/workflows/compatibility.yaml) on pull requests, pushes to `main`, and nightly.
+One contract job fetches every registered tag and checks every pinned commit with `make upstream-versions` and `make upstream-contract`.
+Pull requests and nightly CI skip cluster suites but retain the runner image entrypoint and executor integration tests alongside the server, UI, and image checks.
+
+Pushes to `main` run both cluster suites against the oldest and newest supported patch in each minor line, selected numerically from the registry by [`hack/compatibility-matrix.py`](../hack/compatibility-matrix.py).
+For the current registry, that means v4.1.0 and v4.1.6: four cluster jobs instead of fourteen.
+A minor line with only one registered release runs that release once per suite.
+Weekly runs (Sunday at 03:45 UTC), manual `scope: full` runs, and release runs retain every registered release, including intermediate patches whose controller behavior may differ despite matching schemas.
+A manual `scope: contract` run skips image builds and cluster jobs.
+
+Server, runner, and broker images build in separate jobs, and each cluster suite waits only for its own images.
+The runner entrypoint tests and runner conformance download the same runner-image artifact within the CI run.
+Image archives use gzip once; artifact uploads disable additional compression.
+Release publication still builds images with release-tag metadata rather than promoting the compatibility-tagged images.
 
 The matrix does not exercise every API operation or optional feature: it provisions no persistence database, workflow archive, external artifact store, or SSO provider.
 Test those against a disposable installation with your own configuration before enabling them in production.
+
+### Required CI checks
+
+After the first run of the reorganized CI workflow, update branch protection or repository rulesets to require the consolidated `compatibility / contract` check instead of the old `contract v4.1.x` matrix checks.
+The runner check moves from `runner` to `compatibility / runner`.
+Keep the server, UI, and production-image checks required, and select the new check names shown by GitHub before removing the old requirements.
 
 ## Run one release locally
 

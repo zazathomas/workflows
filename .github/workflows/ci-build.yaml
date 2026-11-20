@@ -57,7 +57,9 @@ jobs:
         env:
           KUBECONFIG: /dev/null
           GOFLAGS: -mod=mod -tags=kubernetes_protomessage_one_more_release
-          BROKER_TEST_DATABASE_URL: postgres://broker:broker-ci-only@127.0.0.1:${{ job.services.broker-postgres.ports[5432] }}/broker?sslmode=disable
+          BROKER_TEST_DATABASE_URL: "postgres://broker:broker-ci-only@\
+            127.0.0.1:${{ job.services.broker-postgres.ports['5432'] }}/broker?\
+            sslmode=disable"
         run: go test -p 2 ./...
       - name: Check the API fixtures exist
         env:
@@ -67,6 +69,12 @@ jobs:
   ui:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    container:
+      # Keep this version aligned with @playwright/test in ui/yarn.lock.
+      image: mcr.microsoft.com/playwright:v1.64.0
+      options: --init --ipc=host
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -75,66 +83,35 @@ jobs:
           cache: yarn
           cache-dependency-path: ui/yarn.lock
       - run: yarn --cwd ui install --frozen-lockfile
+      - name: Check CI coverage and artifact wiring
+        run: node --test hack/tests/ci-workflows.test.js
       - run: yarn --cwd ui test --runInBand
       - run: yarn --cwd ui lint
-      - name: Cache the Playwright browsers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('ui/yarn.lock') }}
-          restore-keys: playwright-${{ runner.os }}-
-      # `--with-deps` installs the system libraries and skips the browser
-      # download when the cache above restored it.
-      - run: yarn --cwd ui playwright install --with-deps chromium
-      # playwright.mock.config.ts starts the dev server itself.
-      - run: make test-ui-e2e
-
-  runner:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      # The same layers are reused by the compatibility matrix and the release
-      # publish (same cache scope), so the runner image is compiled once per
-      # commit rather than once per job.
-      - name: Build the runner image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with:
-          context: .
-          file: Dockerfile.runner
-          platforms: linux/amd64
-          load: true
-          tags: workflows-runner:verify
-          build-args: |
-            VERSION=ci
-            GIT_COMMIT=${{ github.sha }}
-          cache-from: type=gha,scope=runner-image
-          cache-to: type=gha,mode=max,scope=runner-image
-      - run: docker run --rm --entrypoint argo-runner workflows-runner:verify version
-      - name: Start a limited job through the runner image entrypoint
-        run: hack/test-runner-dind.sh workflows-runner:verify
-      - name: Run the executor integration tests against a throwaway Docker daemon
+      - name: Verify the Playwright container matches the test package
         run: |
-          # The privileged DinD flavour: GitHub's Ubuntu 24.04 runners restrict
-          # unprivileged user namespaces, so rootless DinD needs the host-side
-          # AppArmor profile documented in docs/runners.md.
-          docker network create runner-integration
-          docker run -d --name dind --network runner-integration --privileged \
-            -e DOCKER_TLS_CERTDIR= docker:27-dind
-          for i in $(seq 1 60); do
-            docker exec dind docker info > /dev/null 2>&1 && break
-            sleep 2
-          done
-          # The test drives a real daemon; it does not need the runner binary,
-          # so there is nothing to compile beyond the test itself. Module and
-          # build caches are not mounted: a fresh runner has neither, and
-          # caching them for one package costs more than the download.
-          docker run --rm --network runner-integration \
-            -v "$PWD":/src \
-            -w /src -e RUNNER_DOCKER_INTEGRATION=1 -e DOCKER_HOST=tcp://dind:2375 \
-            golang:1.27.3-alpine3.23 \
-            sh -c 'go test -mod=mod -tags=kubernetes_protomessage_one_more_release -count=1 -timeout 300s -run TestIntegrationExecutor ./runner/ -v'
+          node <<'JS'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const image = JSON.parse(
+            fs.readFileSync('/ms-playwright/.docker-info', 'utf8')
+          );
+          const pkg = require(
+            './ui/node_modules/@playwright/test/package.json'
+          );
+          assert.equal(pkg.version, image.driverVersion,
+            'Update the Playwright CI image to match ui/yarn.lock');
+          JS
+      # Same command as make test-ui-e2e; the image does not include make.
+      # playwright.mock.config.ts starts the dev server inside this container.
+      - run: yarn --cwd ui playwright test -c playwright.mock.config.ts
+
+  # Keep image producers and consumers in the same run: main's DinD checks
+  # and runner conformance download the same runner artifact, never rebuild it.
+  compatibility:
+    uses: ./.github/workflows/compatibility.yaml
+    with:
+      scope: ${{ github.event_name == 'push' && 'full' || 'contract' }}
+      runner-tests: true
 
   image:
     # `main` is covered by the compatibility matrix, which builds this image for
@@ -157,8 +134,8 @@ jobs:
           build-args: |
             VERSION=ci
             GIT_COMMIT=${{ github.sha }}
-          # Shared with the compatibility matrix and the release, so the Go and
-          # UI layers of this image are built once per commit.
+          # Reuse compatible layers across CI and releases. Final Go linking
+          # still depends on the version metadata supplied by each workflow.
           cache-from: type=gha,scope=server-image
           cache-to: type=gha,mode=max,scope=server-image
       - run: docker run --rm workflows:verify version

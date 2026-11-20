@@ -1,22 +1,29 @@
 name: workflows compatibility matrix
 
+# Branch and PR runs call this workflow from ci-build.yaml so image artifacts
+# stay in one run. Weekly, manual, and release runs still work independently.
 on:
-  pull_request:
-  push:
-    branches:
-      - main
   schedule:
-    - cron: '45 3 * * *'
+    - cron: '45 3 * * 0'
   workflow_dispatch:
     inputs:
       scope:
-        description: 'contract only, or contract plus a disposable-cluster run for every registered release'
+        description: 'contract only, or contract plus clusters for all releases'
         type: choice
         default: full
         options:
           - full
           - contract
   workflow_call:
+    inputs:
+      scope:
+        description: 'full enables clusters; contract skips them'
+        type: string
+        default: full
+      runner-tests:
+        description: 'Run DinD and executor tests using the shared runner image'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,65 +37,48 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
-      versions: ${{ steps.read.outputs.versions }}
-      baseline: ${{ steps.read.outputs.baseline }}
+      cluster_versions: ${{ steps.read.outputs.cluster_versions }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Read supported releases
         id: read
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json, pathlib
-          registry = json.loads(pathlib.Path('hack/upstream-versions.json').read_text())
-          matrix = [
-              {
-                  'tag': entry['tag'],
-                  'commit': entry['commit'],
-                  'sha256': entry['installManifestSha256'],
-                  'chart': entry['helmChartVersion'],
-              }
-              for entry in registry['versions']
-          ]
-          print(f"baseline={registry['baseline']}")
-          print('versions=' + json.dumps(matrix, separators=(',', ':')))
-          PY
+          python3 hack/compatibility-matrix.py \
+            --event-name "$EVENT_NAME" --ref-type "$REF_TYPE" \
+            >> "$GITHUB_OUTPUT"
 
-  # The contract check is the pull-request gate: it needs no image and no
-  # cluster, so a schema break is caught in about a minute.
+  # One checkout and runner, but still every registered release and pinned SHA.
   contract:
-    needs: registry
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        version: ${{ fromJSON(needs.registry.outputs.versions) }}
-    name: contract ${{ matrix.version.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Fetch ${{ matrix.version.tag }}
-        run: git fetch --no-tags --depth=1 https://github.com/argoproj/argo-workflows.git "refs/tags/${{ matrix.version.tag }}:refs/tags/${{ matrix.version.tag }}"
-      - name: Compare the API contract
-        run: python3 hack/verify-upstream-contract.py --tag "${{ matrix.version.tag }}"
+      - name: Fetch every registered upstream release
+        run: make upstream-versions
+      - name: Compare every API contract
+        run: make upstream-contract
 
-  # One image for every release, built once and handed to the cluster jobs.
-  # Pull requests skip it (nothing would consume the artifact), and so does a
-  # `scope: contract` dispatch.
-  image:
+  # Each image has its own producer, so unrelated builds cannot delay a suite.
+  server-image:
     needs: registry
     if: github.event_name != 'pull_request' && inputs.scope != 'contract'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      # docker/setup-buildx-action v3
+      - uses: >-
+          docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
       - name: Capture build metadata
         id: meta
         run: echo "date=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
-      # Same cache scope as CI and the release: the Go and UI layers of this
-      # image are compiled once per commit, not once per workflow.
-      - name: Build the server image once for every release
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+      - name: Build the server image
+        # docker/build-push-action v6
+        uses: >-
+          docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           target: server
@@ -103,8 +93,39 @@ jobs:
             BUILD_DATE=${{ steps.meta.outputs.date }}
           cache-from: type=gha,scope=server-image
           cache-to: type=gha,mode=max,scope=server-image
-      - name: Build the runner image once for every release
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+      - run: docker run --rm workflows:compatibility version
+      - name: Export the server image
+        run: |
+          docker save workflows:compatibility | gzip -1 > workflows-image.tar.gz
+      # actions/upload-artifact v7.0.2
+      - uses: >-
+          actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: workflows-image
+          path: workflows-image.tar.gz
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+  runner-image:
+    needs: registry
+    if: >-
+      inputs.runner-tests ||
+      (github.event_name != 'pull_request' && inputs.scope != 'contract')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # docker/setup-buildx-action v3
+      - uses: >-
+          docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - name: Capture build metadata
+        id: meta
+        run: echo "date=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Build the shared runner image
+        # docker/build-push-action v6
+        uses: >-
+          docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           file: Dockerfile.runner
@@ -119,8 +140,37 @@ jobs:
             BUILD_DATE=${{ steps.meta.outputs.date }}
           cache-from: type=gha,scope=runner-image
           cache-to: type=gha,mode=max,scope=runner-image
+      - run: >-
+          docker run --rm --entrypoint argo-runner
+          workflows-runner:compatibility version
+      - name: Export the shared runner image
+        run: |
+          docker save workflows-runner:compatibility |
+            gzip -1 > workflows-runner-image.tar.gz
+      # actions/upload-artifact v7.0.2
+      - uses: >-
+          actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: workflows-runner-image
+          path: workflows-runner-image.tar.gz
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+  broker-image:
+    needs: registry
+    if: github.event_name != 'pull_request' && inputs.scope != 'contract'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # docker/setup-buildx-action v3
+      - uses: >-
+          docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
       - name: Build the standalone runner broker image
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        # docker/build-push-action v6
+        uses: >-
+          docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           file: Dockerfile.runner-broker
@@ -129,89 +179,120 @@ jobs:
           tags: workflows-runner-broker:compatibility
           cache-from: type=gha,scope=runner-broker-image
           cache-to: type=gha,mode=max,scope=runner-broker-image
-      - name: Check the images run
+      - name: Export the broker image
         run: |
-          docker run --rm workflows:compatibility version
-          docker run --rm --entrypoint argo-runner workflows-runner:compatibility version
-      - name: Export the images for the cluster jobs
-        run: |
-          docker save workflows:compatibility | gzip -1 > workflows-image.tar.gz
-          docker save workflows-runner:compatibility | gzip -1 > workflows-runner-image.tar.gz
-          docker save workflows-runner-broker:compatibility | gzip -1 > workflows-runner-broker-image.tar.gz
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: workflows-image
-          path: workflows-image.tar.gz
-          retention-days: 3
-          if-no-files-found: error
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: workflows-runner-image
-          path: workflows-runner-image.tar.gz
-          retention-days: 3
-          if-no-files-found: error
-
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+          docker save workflows-runner-broker:compatibility |
+            gzip -1 > workflows-runner-broker-image.tar.gz
+      # actions/upload-artifact v7.0.2
+      - uses: >-
+          actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: workflows-runner-broker-image
           path: workflows-runner-broker-image.tar.gz
+          compression-level: 0
           retention-days: 3
           if-no-files-found: error
 
+  # These CI checks consume exactly the image used by runner conformance.
+  # They do not wait for the server/broker builds or either cluster suite.
+  runner:
+    needs: runner-image
+    if: inputs.runner-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # actions/download-artifact v7.0.0
+      - uses: >-
+          actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: workflows-runner-image
+      - name: Load the shared runner image
+        run: docker load < workflows-runner-image.tar.gz
+      - name: Start a limited job through the runner image entrypoint
+        run: hack/test-runner-dind.sh workflows-runner:compatibility
+      - name: Run executor integration tests against a throwaway Docker daemon
+        run: |
+          docker network create runner-integration
+          docker run -d --name dind --network runner-integration --privileged \
+            -e DOCKER_TLS_CERTDIR= docker:27-dind
+          for _ in $(seq 1 60); do
+            docker exec dind docker info > /dev/null 2>&1 && break
+            sleep 2
+          done
+          docker run --rm --network runner-integration \
+            -v "$PWD":/src -w /src \
+            -e RUNNER_DOCKER_INTEGRATION=1 -e DOCKER_HOST=tcp://dind:2375 \
+            golang:1.27.3-alpine3.23 \
+            sh -c 'go test -mod=mod \
+              -tags=kubernetes_protomessage_one_more_release -count=1 \
+              -timeout 300s -run TestIntegrationExecutor ./runner/ -v'
+
+  # Branch pushes test oldest/newest patches; weekly/manual/release test all.
   conformance:
     needs:
       - registry
-      - image
+      - server-image
     if: github.event_name != 'pull_request' && inputs.scope != 'contract'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        version: ${{ fromJSON(needs.registry.outputs.versions) }}
+        version: ${{ fromJSON(needs.registry.outputs.cluster_versions) }}
     name: conformance ${{ matrix.version.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      # actions/download-artifact v7.0.0
+      - uses: >-
+          actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: workflows-image
       - name: Load the server image and install kind
         run: |
           docker load < workflows-image.tar.gz
-          # The prebuilt binary: `go install sigs.k8s.io/kind` compiled kind from
-          # source in every shard, which cost more than the cluster it drives.
-          curl -fsSL -o "$RUNNER_TEMP/kind" "https://kind.sigs.k8s.io/dl/v0.30.0/kind-linux-amd64"
+          curl -fsSL -o "$RUNNER_TEMP/kind" \
+            "https://kind.sigs.k8s.io/dl/v0.30.0/kind-linux-amd64"
           chmod +x "$RUNNER_TEMP/kind"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
       - name: Run the conformance suite for ${{ matrix.version.tag }}
-        run: bash hack/conformance-version.sh "${{ matrix.version.tag }}" workflows:compatibility
+        run: >-
+          bash hack/conformance-version.sh "${{ matrix.version.tag }}"
+          workflows:compatibility
 
   runner-conformance:
     needs:
       - registry
-      - image
+      - runner-image
+      - broker-image
     if: github.event_name != 'pull_request' && inputs.scope != 'contract'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        version: ${{ fromJSON(needs.registry.outputs.versions) }}
+        version: ${{ fromJSON(needs.registry.outputs.cluster_versions) }}
     name: runner conformance ${{ matrix.version.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      # actions/download-artifact v7.0.0
+      - uses: >-
+          actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: workflows-runner-broker-image
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: >-
+          actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: workflows-runner-image
       - name: Load the images and install kind
         run: |
           docker load < workflows-runner-broker-image.tar.gz
           docker load < workflows-runner-image.tar.gz
-          curl -fsSL -o "$RUNNER_TEMP/kind" "https://kind.sigs.k8s.io/dl/v0.30.0/kind-linux-amd64"
+          curl -fsSL -o "$RUNNER_TEMP/kind" \
+            "https://kind.sigs.k8s.io/dl/v0.30.0/kind-linux-amd64"
           chmod +x "$RUNNER_TEMP/kind"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
       - name: Run the runner conformance suite for ${{ matrix.version.tag }}
-        run: bash hack/conformance-runner-version.sh "${{ matrix.version.tag }}" workflows-runner-broker:compatibility workflows-runner:compatibility
+        run: >-
+          bash hack/conformance-runner-version.sh "${{ matrix.version.tag }}"
+          workflows-runner-broker:compatibility workflows-runner:compatibility

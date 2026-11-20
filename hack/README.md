@@ -4,9 +4,11 @@
 - `upstream-versions.json` lists the upstream releases this image is tested against, with the commit, install-manifest checksum, and Helm chart version for each.
 - `verify-upstream-contract.py` compares the retained API contract with every registered release (`--all`) or one release (`--tag`), and fails when a release would need a path, field, type, enum value, or protobuf tag the fork does not have.
 - `fetch-upstream-versions.py` fetches the registered release tags so the contract check can read them.
+- `compatibility-matrix.py` emits the CI matrices: contract checks cover every release; cluster tests on branch pushes cover the oldest and newest patch per minor line, while weekly, manual-full, and release runs cover every release.
 - `upstream-install.py` prints the pinned `install.yaml` URL and checksum for a registered release, and can download and verify it (`--download`) for offline builds.
 - `deploy/manifests/` renders the upstream release asset from GitHub with the fork's server patch; no Argo YAML is stored in the repository.
-- `tests/` holds unit tests for the contract tooling; run `make test-hack`.
+- `tests/` holds Python unit tests for the contract tooling and matrix selection; run `make test-hack`.
+- `tests/ci-workflows.test.js` checks CI coverage, image artifact wiring, release dependencies, and Playwright version alignment; run `node --test hack/tests/ci-workflows.test.js` inside the Node container after installing UI dependencies.
 - `conformance.sh`, `conformance-run-action.sh`, and `conformance-parameter.sh` test a server image against a disposable upstream cluster; see [the compatibility guide](../docs/compatibility.md).
 - `conformance-version.sh <tag> [image]` creates a disposable kind cluster, installs one registered release, swaps in the server image, and runs all three conformance scripts; see [the compatibility guide](../docs/compatibility.md).
 - `nsswitch.conf` and `ssh_known_hosts` are copied into the server image by the [Dockerfile](../Dockerfile); `update-ssh-known-hosts.sh` regenerates the latter and checks the pinned host-key fingerprints.

@@ -48,6 +48,7 @@ For a UI-only mock backend, use [`hack/mock-argo-server.py`](../hack/README.md) 
 | `make test-ui-e2e` | Mock-backed browser tests | Playwright image (see `ui/AGENTS.md`) |
 | `make lint` | UI ESLint `--fix` and TypeScript checks | node image |
 | `make test-hack` | Compatibility tooling unit tests | python3 |
+| `node --test hack/tests/ci-workflows.test.js` | CI coverage and artifact wiring checks | node image, installed UI dependencies |
 | `make upstream-versions` | Fetches every registered upstream tag (once) | python3, git |
 | `make upstream-contract` | API contract for every registered release | python3, fetched tags |
 | `make compatibility` | Contract check plus server, CLI, and runner Go tests | python3, Go, UI bundle |
@@ -55,6 +56,15 @@ For a UI-only mock backend, use [`hack/mock-argo-server.py`](../hack/README.md) 
 
 `make test-ui-e2e` reuses a dev server already running on `:8080` and otherwise starts one; set `ARGO_UI_BASE_URL` to point it elsewhere, for example the container flow in `ui/AGENTS.md`.
 The suite intercepts API requests and creates no cluster resources; see [`ui/e2e/README.md`](../ui/e2e/README.md).
+CI runs Jest, lint, and browser tests in `mcr.microsoft.com/playwright:v1.64.0` with Node 24, using the image's preinstalled browsers and system dependencies.
+When you update `@playwright/test` in `ui/yarn.lock`, update the CI container version too; CI checks that the versions match.
+
+Run the workflow wiring checks with the existing Node container and dependency volume:
+
+```bash
+docker run --rm -v "$PWD":/src -v workflows-ui-nm:/src/ui/node_modules -w /src node:24-alpine \
+  node --test hack/tests/ci-workflows.test.js
+```
 
 The conformance and API suite scripts (`hack/conformance*.sh`, `make test-api`) create and delete real resources and need an explicitly prepared, disposable installation of a [supported release](compatibility.md).
 They never target a cluster you did not create, and must not run against a shared or production cluster.

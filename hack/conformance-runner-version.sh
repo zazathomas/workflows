@@ -75,19 +75,21 @@ chmod 644 "$work/plugin-token"
 docker run --rm --network kind --env-file "$work/broker.env" --mount "type=bind,src=$work/plugin-token,dst=/test/plugin-token,readonly" "$broker_image" migrate
 join=$(docker run --rm --network kind --env-file "$work/broker.env" --mount "type=bind,src=$work/plugin-token,dst=/test/plugin-token,readonly" "$broker_image" mint 10m)
 
-# Create the broker first so Docker assigns an address on the kind network.
-# The address is then included in the certificate used by the kind pod and the
-# Docker runner. PostgreSQL and the broker publish no host ports.
-: > "$work/tls.crt"
-: > "$work/tls.key"
+# Start with a temporary certificate so Docker assigns an address on the kind
+# network. Replace it with a certificate containing that address before the
+# broker serves requests. PostgreSQL and the broker publish no host ports.
+openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 1 -subj '/CN=runner-broker-test' \
+  -addext 'subjectAltName=IP:127.0.0.1' -addext 'basicConstraints=critical,CA:TRUE' \
+  -keyout "$work/tls.key" -out "$work/tls.crt" 2> "$work/openssl.log"
 chmod 644 "$work/tls.crt" "$work/tls.key" "$work/plugin-token"
-docker create --name "$broker" --network kind --env-file "$work/broker.env" \
+docker run -d --name "$broker" --network kind --env-file "$work/broker.env" \
   -e BROKER_TLS_CERT=/test/tls.crt -e BROKER_TLS_KEY=/test/tls.key \
   --mount "type=bind,src=$work/tls.crt,dst=/test/tls.crt,readonly" \
   --mount "type=bind,src=$work/tls.key,dst=/test/tls.key,readonly" \
   --mount "type=bind,src=$work/plugin-token,dst=/test/plugin-token,readonly" "$broker_image" serve >/dev/null
 broker_ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "kind").IPAddress}}' "$broker")
 [[ "$broker_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
+docker stop "$broker" >/dev/null 2>&1 || true
 openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 1 -subj '/CN=runner-broker-test' \
   -addext "subjectAltName=IP:$broker_ip" -addext 'basicConstraints=critical,CA:TRUE' \
   -keyout "$work/tls.key" -out "$work/tls.crt" 2> "$work/openssl.log"

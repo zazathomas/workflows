@@ -85,7 +85,7 @@ jobs:
         run: |
           echo "date=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
           echo "image=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fa56130a9b0 # v4.4.0
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

@@ -50,9 +50,11 @@ k -n builds apply --server-side -f "$install" >/dev/null
 k wait --for=condition=Established --timeout=120s \
   crd/workflows.argoproj.io crd/workflowtasksets.argoproj.io \
   crd/workflowtaskresults.argoproj.io >/dev/null
-k -n builds rollout status deployment/workflow-controller --timeout=180s >/dev/null
+# Stop the stock controller before configuring plugins. A rollout can finish
+# while an old, terminating leader still creates agents without plugin sidecars.
 # Stock controller/agent end to end. The Argo API server is not involved.
-k -n builds scale deployment/argo-server --replicas=0 >/dev/null
+k -n builds scale deployment/argo-server deployment/workflow-controller --replicas=0 >/dev/null
+k -n builds wait --for=delete pod -l app=workflow-controller --timeout=180s >/dev/null
 k -n builds set env deployment/workflow-controller ARGO_EXECUTOR_PLUGINS=true >/dev/null
 k -n builds apply -f "$root/deploy/runner-broker/workflow-rbac.yaml" >/dev/null
 k -n builds create role controller-reconcile-tasksets --verb=patch --resource=workflowtasksets.argoproj.io/status --dry-run=client -o yaml | k -n builds apply -f - >/dev/null
@@ -101,9 +103,8 @@ k -n builds create secret generic runner-broker-plugin --from-file="token=$work/
 k -n builds create configmap runner-broker-ca --from-file="ca.pem=$work/tls.crt" >/dev/null
 python_script='import sys; p=sys.stdin.read().replace("registry.example.com/workflows-runner-broker:replace-me",sys.argv[1]).replace("https://runner-broker.runner-system.svc:8443",sys.argv[2]).replace("    args: [plugin]","    imagePullPolicy: Never\n    args: [plugin]").replace("      - name: BROKER_PLUGIN_TOKEN\n", "      - name: BROKER_CA_PEM\n        valueFrom:\n          configMapKeyRef: {name: runner-broker-ca, key: ca.pem}\n      - name: BROKER_PLUGIN_TOKEN\n"); print(p)'
 python3 -c "$python_script" "$broker_image" "$base" < "$root/deploy/runner-broker/plugin.yaml" | k apply -f - >/dev/null
-k -n builds rollout status deployment/workflow-controller --timeout=180s
-# Restart so the controller has loaded the plugin ConfigMap before the first job.
-k -n builds rollout restart deployment/workflow-controller >/dev/null
+# Start only after the plugin ConfigMap exists, with no previous leader alive.
+k -n builds scale deployment/workflow-controller --replicas=1 >/dev/null
 k -n builds rollout status deployment/workflow-controller --timeout=180s
 printf '%s\n' '{"allowedRegistries":["docker.io"],"requireDigest":true,"allowRoot":false,"allowEgress":false}' > "$work/policy.json"
 {
